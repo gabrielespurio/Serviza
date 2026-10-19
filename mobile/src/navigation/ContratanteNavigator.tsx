@@ -7,6 +7,8 @@ import { View, Text, Platform, TouchableOpacity } from 'react-native';
 import { Home, Briefcase, MessageSquare, User, Plus, Search } from '../components/icons';
 import { LinearGradient } from 'expo-linear-gradient';
 
+import ChatListScreen from '../screens/ChatListScreen';
+
 const Tab = createBottomTabNavigator();
 
 // Placeholder para outras telas
@@ -116,7 +118,7 @@ export default function ContratanteNavigator({ navigation: rootNavigation }: any
       />
       <Tab.Screen 
         name="Chat" 
-        component={() => <PlaceholderScreen title="Mensagens" />} 
+        component={ChatListScreen} 
         options={{ 
           tabBarIcon: ({ color }) => (
             <View>

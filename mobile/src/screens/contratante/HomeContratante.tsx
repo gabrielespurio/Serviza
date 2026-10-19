@@ -11,6 +11,7 @@ import { CategoryIcon, getCategoryIconAndColors } from '../../components/Categor
 export default function HomeContratante({ navigation }: any) {
   const [userName, setUserName] = useState('');
   const [userInitial, setUserInitial] = useState('U');
+  const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [myJobs, setMyJobs] = useState<any[]>([]);
 
   React.useEffect(() => {
@@ -18,17 +19,26 @@ export default function HomeContratante({ navigation }: any) {
       try {
         const data = await AsyncStorage.getItem('@ContrataAI:userData');
         if (data) {
-          const { name } = JSON.parse(data);
-          const first = name.split(' ')[0];
+          const parsed = JSON.parse(data);
+          const first = parsed.name ? parsed.name.split(' ')[0] : 'Usuário';
           setUserName(first);
           setUserInitial(first.charAt(0).toUpperCase());
+          
+          const emailKey = parsed.email ? parsed.email.toLowerCase().trim() : '';
+          let avatar = await AsyncStorage.getItem('@ContrataAI:avatarUrl');
+          if (!avatar && emailKey) {
+            avatar = await AsyncStorage.getItem(`@ContrataAI:avatar:${emailKey}`);
+          }
+          setUserAvatar(avatar);
         } else {
           setUserName('Usuário');
           setUserInitial('U');
+          setUserAvatar(null);
         }
       } catch (e) {
         setUserName('Usuário');
         setUserInitial('U');
+        setUserAvatar(null);
       }
     }
     loadUser();
@@ -130,8 +140,12 @@ export default function HomeContratante({ navigation }: any) {
         <View className="flex-row justify-between items-center px-6 pt-6 pb-6">
           <View className="flex-row items-center">
             <View className="relative">
-              <View className="w-14 h-14 rounded-full bg-[#FFF4ED] items-center justify-center border border-orange-100">
-                <Text className="text-[#F97316] text-xl font-extrabold">{userInitial}</Text>
+              <View className="w-14 h-14 rounded-full bg-[#FFF4ED] items-center justify-center border border-orange-100 overflow-hidden">
+                {userAvatar ? (
+                  <Image source={{ uri: userAvatar }} className="w-full h-full" resizeMode="cover" />
+                ) : (
+                  <Text className="text-[#F97316] text-xl font-extrabold">{userInitial}</Text>
+                )}
               </View>
               <View className="absolute bottom-0 right-0 w-4 h-4 bg-[#34D399] rounded-full border-2 border-white" />
             </View>
@@ -168,15 +182,20 @@ export default function HomeContratante({ navigation }: any) {
               <TouchableOpacity
                 key={cat.id}
                 onPress={() => navigation.navigate('CreateJob', { preselectedCategory: cat.id })}
-                className="items-center mr-6"
+                className="items-center w-20 mr-2"
               >
                 <View 
-                  className="w-16 h-16 rounded-2xl items-center justify-center mb-2 border border-slate-100 shadow-2xs"
-                  style={{ backgroundColor: cat.bgColor || '#FFF4ED' }}
+                  className="w-16 h-16 rounded-2xl items-center justify-center mb-2"
+                  style={{ backgroundColor: 'transparent' }}
                 >
                   <CategoryIcon category={cat.id} color={cat.color || '#F97316'} size={24} />
                 </View>
-                <Text className="text-[#475569] text-xs font-semibold">{cat.label}</Text>
+                <Text 
+                  className="text-[#475569] text-[11px] font-semibold text-center" 
+                  numberOfLines={2}
+                >
+                  {cat.label}
+                </Text>
               </TouchableOpacity>
             ))}
           </ScrollView>
@@ -333,7 +352,9 @@ export default function HomeContratante({ navigation }: any) {
                       <View className="flex-1">
                         <Text className="text-[#1E293B] font-extrabold text-[16px] leading-snug" numberOfLines={1}>{job.title}</Text>
                         <Text className="text-[#64748B] text-xs font-medium mt-0.5">
-                          {job.profession || job.categoryLabel || jobDetails.label}
+                          {job.profession && job.profession !== job.title 
+                            ? job.profession 
+                            : (job.categoryLabel || jobDetails.label)}
                         </Text>
                       </View>
                     </View>

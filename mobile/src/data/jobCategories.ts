@@ -13,7 +13,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
     label: 'Eventos',
     icon: 'CalendarDays',
     color: '#F97316',
-    bgColor: '#FFF4ED',
+    bgColor: '#FFFFFF',
     professions: [
       'Garçom',
       'Garçom Volante',
@@ -42,7 +42,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
     label: 'Reformas e Construção',
     icon: 'Hammer',
     color: '#D97706',
-    bgColor: '#FEF3C7',
+    bgColor: '#FFFFFF',
     professions: [
       'Pedreiro',
       'Servente',
@@ -62,7 +62,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
     label: 'Elétrica',
     icon: 'Zap',
     color: '#EAB308',
-    bgColor: '#FEF9C3',
+    bgColor: '#FFFFFF',
     professions: [
       'Eletricista',
       'Instalador de Ventilador',
@@ -77,7 +77,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
     label: 'Hidráulica',
     icon: 'Droplets',
     color: '#06B6D4',
-    bgColor: '#ECFEFF',
+    bgColor: '#FFFFFF',
     professions: [
       'Encanador',
       'Bombeiro Hidráulico',
@@ -91,7 +91,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
     label: 'Climatização',
     icon: 'Wind',
     color: '#38BDF8',
-    bgColor: '#F0F9FF',
+    bgColor: '#FFFFFF',
     professions: [
       'Instalador de Ar-Condicionado',
       'Técnico de Ar-Condicionado',
@@ -103,7 +103,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
     label: 'Limpeza',
     icon: 'Sparkles',
     color: '#3B82F6',
-    bgColor: '#EFF6FF',
+    bgColor: '#FFFFFF',
     professions: [
       'Diarista',
       'Faxineiro',
@@ -119,7 +119,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
     label: 'Jardinagem e Piscinas',
     icon: 'TreeDeciduous',
     color: '#22C55E',
-    bgColor: '#F0FDF4',
+    bgColor: '#FFFFFF',
     professions: [
       'Jardineiro',
       'Piscineiro',
@@ -134,7 +134,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
     label: 'Instalação e Montagem',
     icon: 'Wrench',
     color: '#64748B',
-    bgColor: '#F1F5F9',
+    bgColor: '#FFFFFF',
     professions: [
       'Montador de Móveis',
       'Desmontador de Móveis',
@@ -149,7 +149,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
     label: 'Mudanças e Fretes',
     icon: 'Truck',
     color: '#8B5CF6',
-    bgColor: '#F5F3FF',
+    bgColor: '#FFFFFF',
     professions: [
       'Ajudante de Mudança',
       'Carregador',
@@ -163,7 +163,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
     label: 'Cuidados',
     icon: 'Heart',
     color: '#EF4444',
-    bgColor: '#FEF2F2',
+    bgColor: '#FFFFFF',
     professions: [
       'Babá',
       'Cuidador Infantil',
@@ -177,7 +177,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
     label: 'Beleza e Bem-estar',
     icon: 'Scissors',
     color: '#EC4899',
-    bgColor: '#FDF2F8',
+    bgColor: '#FFFFFF',
     professions: [
       'Cabeleireiro',
       'Barbeiro',
@@ -193,7 +193,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
     label: 'Transporte',
     icon: 'Car',
     color: '#6366F1',
-    bgColor: '#EEF2FF',
+    bgColor: '#FFFFFF',
     professions: [
       'Motorista Particular',
       'Motorista',
@@ -206,7 +206,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
     label: 'Pets',
     icon: 'Dog',
     color: '#A855F7',
-    bgColor: '#FAF5FF',
+    bgColor: '#FFFFFF',
     professions: [
       'Dog Walker',
       'Pet Sitter',
@@ -219,7 +219,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
     label: 'Automotivo',
     icon: 'Cog',
     color: '#475569',
-    bgColor: '#F8FAFC',
+    bgColor: '#FFFFFF',
     professions: [
       'Mecânico',
       'Mecânico de Motos',
@@ -234,7 +234,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
     label: 'Agronegócio',
     icon: 'Sprout',
     color: '#16A34A',
-    bgColor: '#F0FDF4',
+    bgColor: '#FFFFFF',
     professions: [
       'Trabalhador Rural',
       'Colhedor',
@@ -247,7 +247,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
     label: 'Apoio Operacional',
     icon: 'Briefcase',
     color: '#0F766E',
-    bgColor: '#F0FDFA',
+    bgColor: '#FFFFFF',
     professions: [
       'Auxiliar de Serviços Gerais',
       'Ajudante Geral',
@@ -262,7 +262,7 @@ export const JOB_CATEGORIES: JobCategory[] = [
     label: 'Ações Promocionais',
     icon: 'Megaphone',
     color: '#D946EF',
-    bgColor: '#FDF4FF',
+    bgColor: '#FFFFFF',
     professions: [
       'Promotor(a)',
       'Demonstrador(a)',
@@ -270,20 +270,6 @@ export const JOB_CATEGORIES: JobCategory[] = [
       'Panfleteiro(a)',
       'Recepcionista para Feiras',
       'Pesquisador(a) de Campo',
-    ],
-  },
-  {
-    id: 'entregas_fretes',
-    label: 'Entregas e Pequenos Fretes',
-    icon: 'Package',
-    color: '#EA580C',
-    bgColor: '#FFF7ED',
-    professions: [
-      'Motoboy',
-      'Bike Entregador',
-      'Motorista para Entregas',
-      'Carreto',
-      'Frete Local',
     ],
   },
 ];

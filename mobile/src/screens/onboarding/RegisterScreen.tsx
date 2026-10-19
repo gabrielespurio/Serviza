@@ -58,13 +58,17 @@ export default function RegisterScreen({ navigation }: any) {
   const handleNext = async () => {
     if (!validate()) return;
 
-    // CRÍTICO: Limpar toda a sessão anterior para evitar herança de dados de outro usuário
+    // Limpar APENAS dados de sessão temporários, PRESERVANDO dados compartilhados
+    // (vagas, propostas, reviews, perfis permanentes de outros emails)
     try {
-      const allKeys = await AsyncStorage.getAllKeys();
-      const contrataKeys = allKeys.filter(k => k.startsWith('@ContrataAI:'));
-      if (contrataKeys.length > 0) {
-        await AsyncStorage.multiRemove(contrataKeys);
-      }
+      const keysToRemove = [
+        '@ContrataAI:token',
+        '@ContrataAI:userData',
+        '@ContrataAI:userRole',
+        '@ContrataAI:avatarUrl',
+        '@ContrataAI:jobDraft',
+      ];
+      await AsyncStorage.multiRemove(keysToRemove);
     } catch (e) {}
 
     try {

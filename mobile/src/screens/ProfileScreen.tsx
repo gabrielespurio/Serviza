@@ -63,8 +63,6 @@ export default function ProfileScreen({ navigation }: any) {
   const [providerReviews, setProviderReviews] = useState<any[]>([]);
   const [topTags, setTopTags] = useState<string[]>(['⏰ Pontual', '💬 Boa comunicação', '✅ Serviço de qualidade']);
   const [wouldHirePercentage, setWouldHirePercentage] = useState<number>(96);
-
-  const [showEditModal, setShowEditModal] = useState(false);
   const [showBadgesModal, setShowBadgesModal] = useState(false);
   const [showLevelsModal, setShowLevelsModal] = useState(false);
   const [completedServices, setCompletedServices] = useState<number>(0);
@@ -74,12 +72,6 @@ export default function ProfileScreen({ navigation }: any) {
   });
   const [levelUpConfig, setLevelUpConfig] = useState<ProviderLevelConfig | null>(null);
   const [showCelebrationModal, setShowCelebrationModal] = useState(false);
-  const [editForm, setEditForm] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    city: '',
-  });
 
   const pickImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -100,6 +92,18 @@ export default function ProfileScreen({ navigation }: any) {
       const uri = result.assets[0].uri;
       setImage(uri);
       await AsyncStorage.setItem('@ContrataAI:avatarUrl', uri);
+      
+      // Salvar também na chave permanente vinculada ao email do usuário
+      try {
+        const rawUser = await AsyncStorage.getItem('@ContrataAI:userData');
+        if (rawUser) {
+          const parsed = JSON.parse(rawUser);
+          if (parsed.email) {
+            const emailKey = parsed.email.toLowerCase().trim();
+            await AsyncStorage.setItem(`@ContrataAI:avatar:${emailKey}`, uri);
+          }
+        }
+      } catch (e) {}
       
       try {
         setUploading(true);
@@ -265,45 +269,6 @@ export default function ProfileScreen({ navigation }: any) {
     });
     return unsubscribe;
   }, [fetchProfile, navigation]);
-
-  const handleOpenEditModal = () => {
-    setEditForm({
-      name: userData.name,
-      email: userData.email,
-      phone: userData.phone,
-      city: userData.city,
-    });
-    setShowEditModal(true);
-  };
-
-  const handleSaveProfile = async () => {
-    if (!editForm.name.trim()) {
-      Alert.alert('Erro', 'Por favor insira seu nome.');
-      return;
-    }
-
-    try {
-      await api.put('/users/profile', {
-        name: editForm.name.trim(),
-        email: editForm.email.trim(),
-        phone: editForm.phone.trim(),
-        city: editForm.city.trim(),
-      });
-    } catch (error) {}
-
-    const updated = {
-      ...userData,
-      name: editForm.name.trim(),
-      email: editForm.email.trim(),
-      phone: editForm.phone.trim(),
-      city: editForm.city.trim() || 'São Paulo, SP',
-    };
-
-    setUserData(updated);
-    await AsyncStorage.setItem('@ContrataAI:userData', JSON.stringify(updated));
-    setShowEditModal(false);
-    Alert.alert('Sucesso', 'Seus dados foram atualizados com sucesso!');
-  };
 
   const handleSwitchMode = () => {
     const isCurrentlyPrestador = activeRole === 'prestador';
@@ -755,7 +720,7 @@ export default function ProfileScreen({ navigation }: any) {
           {/* 1. Meus Dados */}
           <TouchableOpacity 
             activeOpacity={0.7}
-            onPress={handleOpenEditModal}
+            onPress={() => navigation.navigate('EditProfile')}
             className="flex-row items-center justify-between p-3.5 border-b border-slate-100"
           >
             <View className="flex-row items-center flex-1 pr-3">
@@ -829,91 +794,6 @@ export default function ProfileScreen({ navigation }: any) {
           </TouchableOpacity>
         </View>
       </ScrollView>
-
-      {/* ========== MODAL DE EDIÇÃO DE DADOS ========== */}
-      <Modal
-        visible={showEditModal}
-        animationType="slide"
-        presentationStyle="pageSheet"
-        onRequestClose={() => setShowEditModal(false)}
-      >
-        <SafeAreaView className="flex-1 bg-white">
-          <View className="flex-row items-center justify-between px-6 py-4 border-b border-slate-100">
-            <Text className="text-lg font-extrabold text-[#1E293B]">Editar Dados do Perfil</Text>
-            <TouchableOpacity 
-              onPress={() => setShowEditModal(false)}
-              className="w-10 h-10 rounded-full bg-slate-100 items-center justify-center"
-            >
-              <X color="#64748B" size={20} />
-            </TouchableOpacity>
-          </View>
-
-          <ScrollView className="flex-1 px-6 pt-6">
-            <View className="mb-4">
-              <Text className="text-xs font-bold text-[#64748B] uppercase tracking-wider mb-2">Nome Completo</Text>
-              <View className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5">
-                <TextInput
-                  value={editForm.name}
-                  onChangeText={(t) => setEditForm({ ...editForm, name: t })}
-                  placeholder="Seu nome"
-                  placeholderTextColor="#94A3B8"
-                  className="text-base font-semibold text-[#1E293B] p-0"
-                />
-              </View>
-            </View>
-
-            <View className="mb-4">
-              <Text className="text-xs font-bold text-[#64748B] uppercase tracking-wider mb-2">E-mail</Text>
-              <View className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5">
-                <TextInput
-                  value={editForm.email}
-                  onChangeText={(t) => setEditForm({ ...editForm, email: t })}
-                  placeholder="Seu e-mail"
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  placeholderTextColor="#94A3B8"
-                  className="text-base font-semibold text-[#1E293B] p-0"
-                />
-              </View>
-            </View>
-
-            <View className="mb-4">
-              <Text className="text-xs font-bold text-[#64748B] uppercase tracking-wider mb-2">Telefone</Text>
-              <View className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5">
-                <TextInput
-                  value={editForm.phone}
-                  onChangeText={(t) => setEditForm({ ...editForm, phone: t })}
-                  placeholder="Seu telefone"
-                  keyboardType="phone-pad"
-                  placeholderTextColor="#94A3B8"
-                  className="text-base font-semibold text-[#1E293B] p-0"
-                />
-              </View>
-            </View>
-
-            <View className="mb-8">
-              <Text className="text-xs font-bold text-[#64748B] uppercase tracking-wider mb-2">Cidade / Estado</Text>
-              <View className="bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3.5">
-                <TextInput
-                  value={editForm.city}
-                  onChangeText={(t) => setEditForm({ ...editForm, city: t })}
-                  placeholder="Ex: São Paulo, SP"
-                  placeholderTextColor="#94A3B8"
-                  className="text-base font-semibold text-[#1E293B] p-0"
-                />
-              </View>
-            </View>
-
-            <TouchableOpacity 
-              activeOpacity={0.88}
-              onPress={handleSaveProfile}
-              className="bg-[#FF7A2F] rounded-2xl py-4 items-center justify-center shadow-sm"
-            >
-              <Text className="text-white font-extrabold text-base">Salvar Alterações</Text>
-            </TouchableOpacity>
-          </ScrollView>
-        </SafeAreaView>
-      </Modal>
 
       {/* ========== MODAL DO SISTEMA DE NÍVEIS DA SERVIZA ========== */}
       <ProviderLevelsModal

@@ -1,9 +1,9 @@
-import React, { useState } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Platform, Alert, ActivityIndicator } from 'react-native';
+import React, { useState, useMemo } from 'react';
+import { View, Text, ScrollView, TouchableOpacity, Platform, Alert, ActivityIndicator, Switch } from 'react-native';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 import MapView, { Marker } from 'react-native-maps';
 import * as Location from 'expo-location';
-import { Calendar, Clock, MapPin, Navigation, Hash, PenLine } from '../../../components/icons';
+import { Calendar, Clock, MapPin, Navigation, Hash, PenLine, ChevronLeft, ChevronRight, Check } from '../../../components/icons';
 import { Input } from '../../../components/Input';
 import axios from 'axios';
 import { JobFormData } from '../CreateJobFlow';
@@ -13,45 +13,220 @@ interface StepProps {
   onUpdate: (updates: Partial<JobFormData>) => void;
 }
 
+// ========== CUSTOM CALENDAR COMPONENT ==========
+
+const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const MONTHS = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+function toDateKey(date: Date): string {
+  const y = date.getFullYear();
+  const m = (date.getMonth() + 1).toString().padStart(2, '0');
+  const d = date.getDate().toString().padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function formatDateLabel(dateKey: string): string {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+  const weekday = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'][date.getDay()];
+  const monthName = MONTHS[date.getMonth()].substring(0, 3);
+  return `${weekday}, ${d} de ${monthName}`;
+}
+
+interface InlineCalendarProps {
+  selectedDates: string[];
+  onToggleDate: (dateKey: string) => void;
+}
+
+function InlineCalendar({ selectedDates, onToggleDate }: InlineCalendarProps) {
+  const today = new Date();
+  const todayKey = toDateKey(today);
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+
+  const calendarDays = useMemo(() => {
+    const firstDay = new Date(viewYear, viewMonth, 1);
+    const lastDay = new Date(viewYear, viewMonth + 1, 0);
+    const startPad = firstDay.getDay();
+    const totalDays = lastDay.getDate();
+
+    const days: Array<{ day: number; dateKey: string; disabled: boolean } | null> = [];
+
+    // Padding for days before month starts
+    for (let i = 0; i < startPad; i++) days.push(null);
+
+    for (let d = 1; d <= totalDays; d++) {
+      const date = new Date(viewYear, viewMonth, d);
+      const dateKey = toDateKey(date);
+      const isPast = date < new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      days.push({ day: d, dateKey, disabled: isPast });
+    }
+
+    return days;
+  }, [viewMonth, viewYear]);
+
+  const goToPrevMonth = () => {
+    if (viewMonth === 0) {
+      setViewMonth(11);
+      setViewYear(viewYear - 1);
+    } else {
+      setViewMonth(viewMonth - 1);
+    }
+  };
+
+  const goToNextMonth = () => {
+    if (viewMonth === 11) {
+      setViewMonth(0);
+      setViewYear(viewYear + 1);
+    } else {
+      setViewMonth(viewMonth + 1);
+    }
+  };
+
+  const isPrevDisabled = viewYear === today.getFullYear() && viewMonth <= today.getMonth();
+
+  return (
+    <View className="bg-white rounded-[20px] border border-slate-100 overflow-hidden mb-4">
+      {/* Month Header */}
+      <View className="flex-row items-center justify-between px-5 py-4 border-b border-slate-50">
+        <TouchableOpacity
+          onPress={goToPrevMonth}
+          disabled={isPrevDisabled}
+          className={`w-9 h-9 rounded-full items-center justify-center ${isPrevDisabled ? 'opacity-30' : 'bg-slate-50'}`}
+        >
+          <ChevronLeft color="#64748B" size={18} />
+        </TouchableOpacity>
+        <Text className="text-[#1E293B] text-[16px] font-extrabold">
+          {MONTHS[viewMonth]} {viewYear}
+        </Text>
+        <TouchableOpacity
+          onPress={goToNextMonth}
+          className="w-9 h-9 rounded-full items-center justify-center bg-slate-50"
+        >
+          <ChevronRight color="#64748B" size={18} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Weekday Headers */}
+      <View className="flex-row px-3 pt-3 pb-1">
+        {WEEKDAYS.map(wd => (
+          <View key={wd} style={{ flex: 1, alignItems: 'center' }}>
+            <Text className="text-[11px] font-bold text-[#94A3B8] uppercase">{wd}</Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Days Grid */}
+      <View className="px-3 pb-4">
+        {Array.from({ length: Math.ceil(calendarDays.length / 7) }).map((_, weekIdx) => (
+          <View key={weekIdx} className="flex-row" style={{ marginTop: 4 }}>
+            {calendarDays.slice(weekIdx * 7, weekIdx * 7 + 7).map((dayObj, colIdx) => {
+              if (!dayObj) {
+                return <View key={`pad-${colIdx}`} style={{ flex: 1, height: 44 }} />;
+              }
+
+              const isSelected = selectedDates.includes(dayObj.dateKey);
+              const isToday = dayObj.dateKey === todayKey;
+
+              return (
+                <TouchableOpacity
+                  key={dayObj.dateKey}
+                  disabled={dayObj.disabled}
+                  onPress={() => onToggleDate(dayObj.dateKey)}
+                  style={{ flex: 1, height: 44, alignItems: 'center', justifyContent: 'center' }}
+                >
+                  <View
+                    className={`w-10 h-10 rounded-full items-center justify-center ${
+                      isSelected
+                        ? 'bg-[#F97316]'
+                        : isToday
+                        ? 'border-2 border-[#F97316]'
+                        : ''
+                    }`}
+                  >
+                    <Text
+                      className={`text-[15px] font-semibold ${
+                        dayObj.disabled
+                          ? 'text-slate-200'
+                          : isSelected
+                          ? 'text-white'
+                          : isToday
+                          ? 'text-[#F97316]'
+                          : 'text-[#334155]'
+                      }`}
+                    >
+                      {dayObj.day}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            })}
+            {/* Pad remaining cells if last row is incomplete */}
+            {weekIdx === Math.ceil(calendarDays.length / 7) - 1 &&
+              calendarDays.length % 7 !== 0 &&
+              Array.from({ length: 7 - (calendarDays.length % 7) }).map((_, padIdx) => (
+                <View key={`endpad-${padIdx}`} style={{ flex: 1, height: 44 }} />
+              ))}
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+// ========== MAIN COMPONENT ==========
+
 export default function StepLocation({ data, onUpdate }: StepProps) {
-  // Date/Time picker state
-  const [showDatePicker, setShowDatePicker] = useState(false);
-  const [showStartPicker, setShowStartPicker] = useState(false);
-  const [showEndPicker, setShowEndPicker] = useState(false);
+  // Time picker state
+  const [activeTimePicker, setActiveTimePicker] = useState<{
+    type: 'start' | 'end';
+    dateKey?: string; // undefined = global, string = per-day
+  } | null>(null);
 
   // Location state
   const [loadingGPS, setLoadingGPS] = useState(false);
   const [loadingCEP, setLoadingCEP] = useState(false);
 
-  // ========== DATE/TIME HANDLERS ==========
+  // ========== DATE HANDLERS ==========
 
-  const onDateChange = (_event: DateTimePickerEvent, selectedDate?: Date) => {
-    setShowDatePicker(Platform.OS === 'ios' ? true : false);
-    if (selectedDate) {
-      onUpdate({ date: selectedDate });
+  const handleToggleDate = (dateKey: string) => {
+    const current = [...(data.selectedDates || [])];
+    const idx = current.indexOf(dateKey);
+    if (idx >= 0) {
+      current.splice(idx, 1);
+      const newSchedules = { ...(data.dateSchedules || {}) };
+      delete newSchedules[dateKey];
+      onUpdate({ selectedDates: current.sort(), dateSchedules: newSchedules });
+    } else {
+      current.push(dateKey);
+      onUpdate({ selectedDates: current.sort() });
+    }
+    if (current.length <= 1) {
+      onUpdate({ selectedDates: current.sort(), scheduleType: '' });
     }
   };
 
-  const onStartTimeChange = (_event: DateTimePickerEvent, selectedTime?: Date) => {
-    setShowStartPicker(Platform.OS === 'ios' ? true : false);
-    if (selectedTime) {
-      onUpdate({ startTime: selectedTime });
-    }
-  };
+  // ========== TIME HANDLERS ==========
 
-  const onEndTimeChange = (_event: DateTimePickerEvent, selectedTime?: Date) => {
-    setShowEndPicker(Platform.OS === 'ios' ? true : false);
-    if (selectedTime) {
-      onUpdate({ endTime: selectedTime });
-    }
-  };
+  const onTimeChange = (_event: DateTimePickerEvent, selectedTime?: Date) => {
+    if (Platform.OS !== 'ios') setActiveTimePicker(null);
+    if (!selectedTime || !activeTimePicker) return;
 
-  const formatDate = (date: Date | null) => {
-    if (!date) return '';
-    const d = date.getDate().toString().padStart(2, '0');
-    const m = (date.getMonth() + 1).toString().padStart(2, '0');
-    const y = date.getFullYear();
-    return `${d}/${m}/${y}`;
+    if (activeTimePicker.dateKey) {
+      // Per-day time
+      const key = activeTimePicker.dateKey;
+      const existing = data.dateSchedules[key] || { startTime: null, endTime: null };
+      const updated = {
+        ...existing,
+        [activeTimePicker.type === 'start' ? 'startTime' : 'endTime']: selectedTime,
+      };
+      onUpdate({ dateSchedules: { ...data.dateSchedules, [key]: updated } });
+    } else {
+      // Global time
+      onUpdate({
+        [activeTimePicker.type === 'start' ? 'startTime' : 'endTime']: selectedTime,
+      });
+    }
   };
 
   const formatTime = (date: Date | null) => {
@@ -61,13 +236,27 @@ export default function StepLocation({ data, onUpdate }: StepProps) {
     return `${h}:${m}`;
   };
 
-  const timeError = (): string => {
-    if (data.startTime && data.endTime) {
-      const start = data.startTime.getHours() * 60 + data.startTime.getMinutes();
-      const end = data.endTime.getHours() * 60 + data.endTime.getMinutes();
-      if (end <= start) return 'O horário de término deve ser maior que o de início.';
+  const getTimePickerValue = (): Date => {
+    if (!activeTimePicker) return new Date();
+    if (activeTimePicker.dateKey) {
+      const sched = data.dateSchedules[activeTimePicker.dateKey];
+      if (activeTimePicker.type === 'start') return sched?.startTime || new Date();
+      return sched?.endTime || new Date();
     }
-    return '';
+    return activeTimePicker.type === 'start' ? (data.startTime || new Date()) : (data.endTime || new Date());
+  };
+
+  // ========== SCHEDULE TYPE ==========
+
+  const handleScheduleType = (type: 'same' | 'different') => {
+    onUpdate({ scheduleType: type });
+    if (type === 'same') {
+      // Clear per-day schedules
+      onUpdate({ scheduleType: type, dateSchedules: {} });
+    } else {
+      // Clear global times
+      onUpdate({ scheduleType: type, startTime: null, endTime: null });
+    }
   };
 
   // ========== LOCATION HANDLERS ==========
@@ -127,20 +316,15 @@ export default function StepLocation({ data, onUpdate }: StepProps) {
           };
           onUpdate({ address: newAddress });
 
-          // Geocode to get coordinates for the map
           try {
             const fullAddress = `${newAddress.rua}, ${newAddress.bairro}, ${newAddress.cidade}, ${newAddress.estado}, Brasil`;
             const coords = await Location.geocodeAsync(fullAddress);
             if (coords.length > 0) {
               onUpdate({ coordinates: { latitude: coords[0].latitude, longitude: coords[0].longitude } });
             }
-          } catch (geoErr) {
-            // Geocoding failed silently — map won't show but address is still valid
-          }
+          } catch (geoErr) {}
         }
-      } catch (err) {
-        // ViaCEP failed — let user fill manually
-      }
+      } catch (err) {}
       setLoadingCEP(false);
     }
   };
@@ -162,102 +346,217 @@ export default function StepLocation({ data, onUpdate }: StepProps) {
     onUpdate({ coordinates: { latitude, longitude } });
   };
 
-  const hasAddress = data.address.rua || data.address.cidade;
+  const hasAddress = data.address?.rua || data.address?.cidade;
+  const safeSelectedDates = data.selectedDates || [];
+  const safeDateSchedules = data.dateSchedules || {};
+  const multiDay = safeSelectedDates.length > 1;
+  const singleDay = safeSelectedDates.length === 1;
+
+  // ========== RENDER ==========
 
   return (
     <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
       {/* ===== DATE SECTION ===== */}
       <Text className="text-lg font-extrabold text-[#1E293B] mb-1">Quando será o serviço?</Text>
-      <Text className="text-[#94A3B8] text-sm mb-6">Selecione a data e o horário</Text>
+      <Text className="text-[#94A3B8] text-sm mb-4">Toque nos dias desejados no calendário</Text>
 
-      {/* Date Picker */}
-      <TouchableOpacity
-        className="bg-white border border-slate-200 rounded-[16px] px-5 py-4 mb-4 flex-row items-center justify-between"
-        onPress={() => setShowDatePicker(true)}
-      >
-        <View className="flex-row items-center">
-          <Calendar color="#F97316" size={20} />
-          <Text className={`ml-3 text-base ${data.date ? 'text-[#1E293B] font-semibold' : 'text-[#94A3B8]'}`}>
-            {data.date ? formatDate(data.date) : 'Selecionar data'}
+      {/* Inline Calendar */}
+      <InlineCalendar
+        selectedDates={safeSelectedDates}
+        onToggleDate={handleToggleDate}
+      />
+
+      {/* Selected Days Counter */}
+      {safeSelectedDates.length > 0 && (
+        <View className="bg-[#FFF4ED] rounded-2xl px-4 py-3 mb-5 flex-row items-center">
+          <Calendar color="#F97316" size={18} />
+          <Text className="text-[#F97316] text-[14px] font-bold ml-2.5">
+            {singleDay
+              ? `1 dia selecionado — ${formatDateLabel(safeSelectedDates[0])}`
+              : `${safeSelectedDates.length} dias selecionados`}
           </Text>
         </View>
-      </TouchableOpacity>
+      )}
 
-      {showDatePicker && (
-        <View className="bg-white rounded-2xl mb-4 overflow-hidden border border-slate-100">
-          <DateTimePicker
-            value={data.date || new Date()}
-            mode="date"
-            display={Platform.OS === 'ios' ? 'inline' : 'default'}
-            minimumDate={new Date()}
-            onChange={onDateChange}
-            locale="pt-BR"
-          />
-          {Platform.OS === 'ios' && (
-            <TouchableOpacity className="py-3 items-center border-t border-slate-100" onPress={() => setShowDatePicker(false)}>
-              <Text className="text-[#F97316] font-bold">Confirmar</Text>
+      {/* ===== TIME SECTION ===== */}
+      {singleDay && (
+        <>
+          <Text className="text-[15px] font-bold text-[#1E293B] mb-3">Horário do serviço</Text>
+          <View className="flex-row gap-3 mb-5">
+            <TouchableOpacity
+              className="flex-1 bg-white border border-slate-200 rounded-[16px] px-4 py-4 flex-row items-center"
+              onPress={() => setActiveTimePicker({ type: 'start' })}
+            >
+              <Clock color="#F97316" size={18} />
+              <Text className={`ml-2 text-[15px] ${data.startTime ? 'text-[#1E293B] font-semibold' : 'text-[#94A3B8]'}`}>
+                {data.startTime ? formatTime(data.startTime) : 'Início'}
+              </Text>
             </TouchableOpacity>
+
+            <TouchableOpacity
+              className="flex-1 bg-white border border-slate-200 rounded-[16px] px-4 py-4 flex-row items-center"
+              onPress={() => setActiveTimePicker({ type: 'end' })}
+            >
+              <Clock color="#94A3B8" size={18} />
+              <Text className={`ml-2 text-[15px] ${data.endTime ? 'text-[#1E293B] font-semibold' : 'text-[#94A3B8]'}`}>
+                {data.endTime ? formatTime(data.endTime) : 'Término'}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </>
+      )}
+
+      {multiDay && (
+        <>
+          <Text className="text-[15px] font-bold text-[#1E293B] mb-1">Configuração de horários</Text>
+          <Text className="text-[#94A3B8] text-[13px] mb-4">Os horários serão iguais em todos os dias?</Text>
+
+          {/* Schedule Type Toggle */}
+          <View className="flex-row gap-3 mb-5">
+            <TouchableOpacity
+              className={`flex-1 rounded-[18px] p-4 items-center border-2 ${
+                data.scheduleType === 'same'
+                  ? 'border-[#F97316] bg-[#FFF4ED]'
+                  : 'border-slate-200 bg-white'
+              }`}
+              onPress={() => handleScheduleType('same')}
+            >
+              <View className={`w-10 h-10 rounded-full items-center justify-center mb-2 ${
+                data.scheduleType === 'same' ? 'bg-[#F97316]' : 'bg-slate-100'
+              }`}>
+                <Clock color={data.scheduleType === 'same' ? '#fff' : '#94A3B8'} size={20} />
+              </View>
+              <Text className={`text-[14px] font-bold text-center ${
+                data.scheduleType === 'same' ? 'text-[#F97316]' : 'text-[#1E293B]'
+              }`}>
+                Mesmo horário
+              </Text>
+              <Text className={`text-[11px] text-center mt-0.5 ${
+                data.scheduleType === 'same' ? 'text-[#F97316]/70' : 'text-[#94A3B8]'
+              }`}>
+                Para todos os dias
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              className={`flex-1 rounded-[18px] p-4 items-center border-2 ${
+                data.scheduleType === 'different'
+                  ? 'border-[#F97316] bg-[#FFF4ED]'
+                  : 'border-slate-200 bg-white'
+              }`}
+              onPress={() => handleScheduleType('different')}
+            >
+              <View className={`w-10 h-10 rounded-full items-center justify-center mb-2 ${
+                data.scheduleType === 'different' ? 'bg-[#F97316]' : 'bg-slate-100'
+              }`}>
+                <Calendar color={data.scheduleType === 'different' ? '#fff' : '#94A3B8'} size={20} />
+              </View>
+              <Text className={`text-[14px] font-bold text-center ${
+                data.scheduleType === 'different' ? 'text-[#F97316]' : 'text-[#1E293B]'
+              }`}>
+                Horários diferentes
+              </Text>
+              <Text className={`text-[11px] text-center mt-0.5 ${
+                data.scheduleType === 'different' ? 'text-[#F97316]/70' : 'text-[#94A3B8]'
+              }`}>
+                Personalizar cada dia
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Same Time Fields */}
+          {data.scheduleType === 'same' && (
+            <View className="mb-5">
+              <Text className="text-[13px] font-semibold text-[#64748B] mb-3 ml-1">
+                Horário que vale para todos os {safeSelectedDates.length} dias:
+              </Text>
+              <View className="flex-row gap-3">
+                <TouchableOpacity
+                  className="flex-1 bg-white border border-slate-200 rounded-[16px] px-4 py-4 flex-row items-center"
+                  onPress={() => setActiveTimePicker({ type: 'start' })}
+                >
+                  <Clock color="#F97316" size={18} />
+                  <Text className={`ml-2 text-[15px] ${data.startTime ? 'text-[#1E293B] font-semibold' : 'text-[#94A3B8]'}`}>
+                    {data.startTime ? formatTime(data.startTime) : 'Início'}
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  className="flex-1 bg-white border border-slate-200 rounded-[16px] px-4 py-4 flex-row items-center"
+                  onPress={() => setActiveTimePicker({ type: 'end' })}
+                >
+                  <Clock color="#94A3B8" size={18} />
+                  <Text className={`ml-2 text-[15px] ${data.endTime ? 'text-[#1E293B] font-semibold' : 'text-[#94A3B8]'}`}>
+                    {data.endTime ? formatTime(data.endTime) : 'Término'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           )}
-        </View>
+
+          {/* Different Time — Per-Day Cards */}
+          {data.scheduleType === 'different' && (
+            <View className="mb-5 gap-3">
+              {safeSelectedDates.map(dateKey => {
+                const sched = safeDateSchedules[dateKey] || { startTime: null, endTime: null };
+                const isComplete = sched.startTime && sched.endTime;
+                return (
+                  <View
+                    key={dateKey}
+                    className={`bg-white rounded-[18px] border p-4 ${
+                      isComplete ? 'border-[#34D399]/40' : 'border-slate-200'
+                    }`}
+                  >
+                    <View className="flex-row items-center mb-3">
+                      <Calendar color="#F97316" size={16} />
+                      <Text className="text-[#1E293B] text-[14px] font-bold ml-2">
+                        {formatDateLabel(dateKey)}
+                      </Text>
+                      {isComplete && (
+                        <View className="ml-auto w-6 h-6 rounded-full bg-[#34D399] items-center justify-center">
+                          <Check color="#fff" size={14} strokeWidth={3} />
+                        </View>
+                      )}
+                    </View>
+                    <View className="flex-row gap-3">
+                      <TouchableOpacity
+                        className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-3 py-3 flex-row items-center"
+                        onPress={() => setActiveTimePicker({ type: 'start', dateKey })}
+                      >
+                        <Clock color="#F97316" size={16} />
+                        <Text className={`ml-2 text-[14px] ${sched.startTime ? 'text-[#1E293B] font-semibold' : 'text-[#94A3B8]'}`}>
+                          {sched.startTime ? formatTime(sched.startTime) : 'Início'}
+                        </Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        className="flex-1 bg-slate-50 border border-slate-100 rounded-xl px-3 py-3 flex-row items-center"
+                        onPress={() => setActiveTimePicker({ type: 'end', dateKey })}
+                      >
+                        <Clock color="#94A3B8" size={16} />
+                        <Text className={`ml-2 text-[14px] ${sched.endTime ? 'text-[#1E293B] font-semibold' : 'text-[#94A3B8]'}`}>
+                          {sched.endTime ? formatTime(sched.endTime) : 'Término'}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                );
+              })}
+            </View>
+          )}
+        </>
       )}
 
-      {/* Time Pickers */}
-      <View className="flex-row gap-3 mb-2">
-        <TouchableOpacity
-          className="flex-1 bg-white border border-slate-200 rounded-[16px] px-4 py-4 flex-row items-center"
-          onPress={() => setShowStartPicker(true)}
-        >
-          <Clock color="#F97316" size={18} />
-          <Text className={`ml-2 text-[15px] ${data.startTime ? 'text-[#1E293B] font-semibold' : 'text-[#94A3B8]'}`}>
-            {data.startTime ? formatTime(data.startTime) : 'Início'}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          className="flex-1 bg-white border border-slate-200 rounded-[16px] px-4 py-4 flex-row items-center"
-          onPress={() => setShowEndPicker(true)}
-        >
-          <Clock color="#94A3B8" size={18} />
-          <Text className={`ml-2 text-[15px] ${data.endTime ? 'text-[#1E293B] font-semibold' : 'text-[#94A3B8]'}`}>
-            {data.endTime ? formatTime(data.endTime) : 'Término'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      {timeError() ? (
-        <Text className="text-red-500 text-sm mb-4 ml-1">{timeError()}</Text>
-      ) : (
-        <View className="mb-6" />
-      )}
-
-      {showStartPicker && (
+      {/* Time Picker Modal (shared) */}
+      {activeTimePicker && (
         <View className="bg-white rounded-2xl mb-4 overflow-hidden border border-slate-100">
           <DateTimePicker
-            value={data.startTime || new Date()}
+            value={getTimePickerValue()}
             mode="time"
             display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={onStartTimeChange}
+            onChange={onTimeChange}
             is24Hour
           />
           {Platform.OS === 'ios' && (
-            <TouchableOpacity className="py-3 items-center border-t border-slate-100" onPress={() => setShowStartPicker(false)}>
-              <Text className="text-[#F97316] font-bold">Confirmar</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
-
-      {showEndPicker && (
-        <View className="bg-white rounded-2xl mb-4 overflow-hidden border border-slate-100">
-          <DateTimePicker
-            value={data.endTime || new Date()}
-            mode="time"
-            display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-            onChange={onEndTimeChange}
-            is24Hour
-          />
-          {Platform.OS === 'ios' && (
-            <TouchableOpacity className="py-3 items-center border-t border-slate-100" onPress={() => setShowEndPicker(false)}>
+            <TouchableOpacity className="py-3 items-center border-t border-slate-100" onPress={() => setActiveTimePicker(null)}>
               <Text className="text-[#F97316] font-bold">Confirmar</Text>
             </TouchableOpacity>
           )}
@@ -473,6 +772,29 @@ export default function StepLocation({ data, onUpdate }: StepProps) {
           </View>
         </View>
       )}
+
+      {/* ===== PRIVACY TOGGLE ===== */}
+      <View className="mt-8 mb-6 bg-white rounded-2xl border border-[#F97316]/30 p-4 shadow-sm">
+        <View className="flex-row items-center justify-between mb-2">
+          <View className="flex-row items-center flex-1 pr-3">
+            <View className="w-8 h-8 rounded-full bg-[#FFF4ED] items-center justify-center mr-3">
+              <MapPin color="#F97316" size={16} />
+            </View>
+            <Text className="text-[15px] font-bold text-[#1E293B]">Privacidade do Endereço</Text>
+          </View>
+          <Switch
+            value={data.hideExactLocationUntilHired !== false} // defaults to true
+            onValueChange={(val) => onUpdate({ hideExactLocationUntilHired: val })}
+            trackColor={{ false: '#CBD5E1', true: '#F97316' }}
+            thumbColor={Platform.OS === 'ios' ? '#FFFFFF' : (data.hideExactLocationUntilHired !== false ? '#FFFFFF' : '#F8FAFC')}
+          />
+        </View>
+        <Text className="text-[13px] text-[#64748B] leading-relaxed mt-1">
+          {data.hideExactLocationUntilHired !== false
+            ? 'Oculte o endereço exato. Os candidatos verão apenas uma área de 500m aproximada. O endereço completo só é revelado para o prestador que você confirmar.'
+            : 'O endereço exato e o mapa preciso serão exibidos para todos os prestadores que visualizarem sua vaga.'}
+        </Text>
+      </View>
     </ScrollView>
   );
 }

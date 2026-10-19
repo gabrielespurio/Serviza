@@ -1,11 +1,72 @@
 import React, { useState } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Alert, TextInput, Modal, Image, Platform, StatusBar } from 'react-native';
-import { ArrowLeft, MapPin, DollarSign, Clock, ShieldCheck, CheckCircle2, Send, X, Star, Briefcase, Award, Heart, Share2, ArrowRight, User } from '../../components/icons';
+import { ArrowLeft, MapPin, DollarSign, Clock, ShieldCheck, CheckCircle2, Send, X, Star, Briefcase, Award, Heart, Share2, ArrowRight, User, Calendar, Navigation, Users } from '../../components/icons';
+import Bookmark from 'lucide-react-native/dist/esm/icons/bookmark.mjs';
+import MapView, { Marker, Circle } from 'react-native-maps';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CategoryIcon, getCategoryIconAndColors } from '../../components/CategoryIcon';
 import { api } from '../../services/api';
 import { getProviderLevelDetailsByServices } from '../../services/providerLevels';
+
+const MONTHS = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+
+function formatDateShort(dateString: string | null): string {
+  if (!dateString) return 'Data não definida';
+  let date: Date;
+  try {
+    if (dateString.includes('T')) {
+      date = new Date(dateString);
+    } else {
+      const [y, m, d] = dateString.split('-').map(Number);
+      date = new Date(y, m - 1, d);
+    }
+    const weekday = WEEKDAYS[date.getDay()];
+    const month = MONTHS[date.getMonth()];
+    return `${weekday}, ${date.getDate()} ${month}`;
+  } catch(e) {
+    return 'Data inválida';
+  }
+}
+
+function formatTimeShort(isoString: string | null): string {
+  if (!isoString) return '';
+  try {
+    const date = new Date(isoString);
+    const h = date.getHours().toString().padStart(2, '0');
+    const m = date.getMinutes().toString().padStart(2, '0');
+    return `${h}h${m !== '00' ? m : ''}`;
+  } catch(e) {
+    return '';
+  }
+}
+
+function getJobTimeRange(job: any): string {
+  if (job.selectedDates && job.selectedDates.length > 1) {
+    return 'Vários horários';
+  }
+  
+  if (job.scheduleType === 'same' && job.startTime && job.endTime) {
+    return `${formatTimeShort(job.startTime)} - ${formatTimeShort(job.endTime)}`;
+  }
+  
+  if (job.selectedDates && job.selectedDates.length === 1) {
+    const dKey = job.selectedDates[0];
+    const sched = job.dateSchedules?.[dKey];
+    if (sched && sched.startTime && sched.endTime) {
+      return `${formatTimeShort(sched.startTime)} - ${formatTimeShort(sched.endTime)}`;
+    }
+    if (job.startTime && job.endTime) {
+      return `${formatTimeShort(job.startTime)} - ${formatTimeShort(job.endTime)}`;
+    }
+  }
+  
+  if (job.startTime && job.endTime) {
+    return `${formatTimeShort(job.startTime)} - ${formatTimeShort(job.endTime)}`;
+  }
+  return 'Horário a combinar';
+}
 
 export default function JobDetailsScreen({ route, navigation }: any) {
   const job = route?.params?.job || {
@@ -234,240 +295,304 @@ export default function JobDetailsScreen({ route, navigation }: any) {
 
   return (
     <View style={{ flex: 1, backgroundColor: '#FAFAFA' }}>
-      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+      <StatusBar barStyle="dark-content" translucent backgroundColor="transparent" />
 
-      {/* Botões Flutuantes Superiores sobre a Imagem */}
+      {/* ===== HEADER ===== */}
       <View 
-        className="flex-row items-center justify-between px-5 absolute left-0 right-0 z-30"
-        style={{ top: Platform.OS === 'ios' ? 52 : 44 }}
+        className="flex-row items-center justify-between px-5 bg-[#FAFAFA] z-30 pb-3"
+        style={{ paddingTop: Platform.OS === 'ios' ? 52 : 44 }}
       >
         <TouchableOpacity
           activeOpacity={0.8}
           onPress={() => navigation.goBack()}
-          className="w-10 h-10 rounded-full bg-black/45 items-center justify-center backdrop-blur-md"
+          className="w-10 h-10 items-start justify-center"
         >
-          <ArrowLeft color="#FFFFFF" size={20} strokeWidth={2.6} />
+          <ArrowLeft color="#1E293B" size={24} strokeWidth={2.5} />
         </TouchableOpacity>
 
-        <View className="flex-row items-center gap-3">
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => setIsFavorite(!isFavorite)}
-            className="w-10 h-10 rounded-full bg-black/45 items-center justify-center backdrop-blur-md"
-          >
-            <Heart 
-              color={isFavorite ? '#FF7A2F' : '#FFFFFF'} 
-              fill={isFavorite ? '#FF7A2F' : 'transparent'} 
-              size={19} 
-              strokeWidth={2.4} 
+        <Text className="text-[17px] font-extrabold text-[#1E293B]">
+          Detalhes da vaga
+        </Text>
+
+        <View className="flex-row items-center gap-4">
+          <TouchableOpacity activeOpacity={0.8} onPress={() => setIsFavorite(!isFavorite)}>
+            <Bookmark 
+              color={isFavorite ? '#EA580C' : '#1E293B'} 
+              fill={isFavorite ? '#EA580C' : 'transparent'} 
+              size={22} 
+              strokeWidth={2.2} 
             />
           </TouchableOpacity>
-
-          <TouchableOpacity
-            activeOpacity={0.8}
-            onPress={() => Alert.alert('Compartilhar', `Compartilhar a vaga de ${job.title} com outros colegas profissionais.`)}
-            className="w-10 h-10 rounded-full bg-black/45 items-center justify-center backdrop-blur-md"
-          >
-            <Share2 color="#FFFFFF" size={19} strokeWidth={2.4} />
+          <TouchableOpacity activeOpacity={0.8} onPress={() => Alert.alert('Compartilhar', `Compartilhar a vaga de ${job.title}`)}>
+            <Share2 color="#1E293B" size={22} strokeWidth={2.2} />
           </TouchableOpacity>
         </View>
       </View>
 
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 110 }}>
-        {/* Hero Cover Image (Inspiração idêntica à Imagem 2) */}
-        <View className="w-full h-64 relative bg-slate-800">
-          <Image
-            source={{ uri: getCoverImage() }}
-            className="w-full h-full resize-cover"
-          />
-          <View className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-black/30" />
-        </View>
-
-        {/* Card Principal Arredondado Sobrepondo a Imagem */}
-        <View className="bg-[#FAFAFA] -mt-6 rounded-t-[32px] px-6 pt-6 flex-1 shadow-lg">
-          {/* Top Tag & Preço */}
-          <View className="flex-row items-center justify-between mb-2">
-            <Text className="text-xs font-extrabold text-[#FF7A2F] uppercase tracking-wider">
-              {job.categoryLabel || job.profession || 'URGENTE'}
-            </Text>
-            <View className="flex-row items-baseline">
-              <Text className="text-2xl font-extrabold text-[#FF7A2F]">
-                {job.priceLabel || `R$ ${job.price || '150'}`}
+        
+        {/* ===== TOP BANNER ===== */}
+        <View className="mx-5 mt-2 bg-[#FFF6F0] rounded-[24px] p-5 shadow-sm border border-[#FFE5D3]">
+          <View className="flex-row items-center justify-between mb-3">
+            <View className="bg-[#FFE5D3] px-3 py-1 rounded-full">
+              <Text className="text-[10px] font-extrabold text-[#EA580C] uppercase tracking-wider">
+                {job.categoryLabel || job.profession || 'GERAL'}
               </Text>
-              {!job.priceLabel?.includes('/') && (
-                <Text className="text-xs font-semibold text-[#64748B] ml-1">/total</Text>
-              )}
             </View>
           </View>
 
-          {/* Título Principal */}
-          <Text className="text-[26px] font-extrabold text-[#1E293B] leading-tight mb-2">
+          <Text className="text-[24px] font-extrabold text-[#1E293B] leading-[28px] mb-4 pr-4">
             {job.title}
           </Text>
 
-          {/* Horário & Localização */}
-          <View className="flex-row items-center mb-6">
-            <Clock color="#64748B" size={14} className="mr-1.5" />
-            <Text className="text-xs font-semibold text-[#64748B]">
-              Publicado {job.timeAgo || 'há 2h'} • {job.location || 'Centro, São Paulo'}
-            </Text>
-          </View>
-
-          {/* 3 Grid Destaques: Distância / Avaliação / Nível */}
-          <View className="flex-row justify-between gap-3 mb-6">
-            <View className="bg-white rounded-2xl p-3.5 flex-1 items-center justify-center border border-slate-100 shadow-2xs">
-              <View className="w-9 h-9 rounded-full bg-[#FFF4ED] items-center justify-center mb-1.5">
-                <MapPin color="#FF7A2F" size={18} strokeWidth={2.4} />
-              </View>
-              <Text className="text-[11px] font-semibold text-[#64748B]">Distância</Text>
-              <Text className="text-xs font-extrabold text-[#1E293B] mt-0.5">2.5 km</Text>
-            </View>
-
-            <View className="bg-white rounded-2xl p-3.5 flex-1 items-center justify-center border border-slate-100 shadow-2xs">
-              <View className="w-9 h-9 rounded-full bg-[#FFF4ED] items-center justify-center mb-1.5">
-                <Star color="#FF7A2F" fill="#FF7A2F" size={18} />
-              </View>
-              <Text className="text-[11px] font-semibold text-[#64748B]">Avaliação</Text>
-              <Text className="text-xs font-extrabold text-[#1E293B] mt-0.5">
-                {job.clientRating || '4.9'} ({job.clientJobsCount || '24'})
+          <View className="flex-row flex-wrap items-end justify-between border-t border-[#FFE5D3]/60 pt-4">
+            <View>
+              <Text className="text-[24px] font-extrabold text-[#EA580C]">
+                {job.priceLabel || `R$ ${job.price || '150,00'}`}
               </Text>
+              <Text className="text-[11px] font-semibold text-[#64748B] ml-0.5">Valor total</Text>
             </View>
+            <View className="bg-[#DCFCE7] px-3 py-1.5 rounded-full flex-row items-center mt-2">
+              <View className="w-2 h-2 rounded-full bg-[#16A34A] mr-1.5" />
+              <Text className="text-[11px] font-bold text-[#16A34A]">Vaga disponível</Text>
+            </View>
+          </View>
+        </View>
 
-            <View className="bg-white rounded-2xl p-3.5 flex-1 items-center justify-center border border-slate-100 shadow-2xs">
-              <View className="w-9 h-9 rounded-full bg-[#FFF4ED] items-center justify-center mb-1.5">
-                <CategoryIcon category={job.categoryLabel || job.categoryId} profession={job.profession || job.title} color="#FF7A2F" size={18} strokeWidth={2.4} />
-              </View>
-              <Text className="text-[11px] font-semibold text-[#64748B]">Categoria</Text>
-              <Text className="text-xs font-extrabold text-[#1E293B] mt-0.5" numberOfLines={1}>
-                {job.categoryLabel || 'Especializado'}
+        {/* ===== 3 CARDS RESUMO ===== */}
+        <View className="flex-row justify-between px-5 mt-5 gap-2.5">
+          {/* Card Data */}
+          <View className="bg-white rounded-[20px] p-3 flex-1 border border-slate-100 shadow-sm flex-row items-center">
+            <View className="w-9 h-9 rounded-full bg-[#FFF6F0] items-center justify-center mr-2">
+              <Calendar color="#EA580C" size={18} strokeWidth={2.5} />
+            </View>
+            <View className="flex-1">
+              <Text className="text-[11px] font-extrabold text-[#1E293B] mb-0.5" numberOfLines={1}>
+                {job.selectedDates && job.selectedDates.length > 1 ? 'Múltiplos dias' : formatDateShort(job.selectedDates?.[0] || job.date)}
+              </Text>
+              <Text className="text-[10px] font-medium text-[#64748B]" numberOfLines={1}>
+                {getJobTimeRange(job)}
               </Text>
             </View>
           </View>
 
-          {/* Descrição do Serviço */}
-          <View className="mb-6">
-            <Text className="text-[18px] font-extrabold text-[#1E293B] mb-2.5">
-              Descrição do Serviço
-            </Text>
-            <Text className="text-[#475569] text-[15px] leading-relaxed mb-3">
-              {job.description}
-            </Text>
-
-            <View className="gap-2 pt-1">
-              <View className="flex-row items-center">
-                <View className="w-1.5 h-1.5 rounded-full bg-[#FF7A2F] mr-2.5" />
-                <Text className="text-[14px] text-[#475569] font-medium">Verificação detalhada e diagnóstico presencial</Text>
-              </View>
-              <View className="flex-row items-center">
-                <View className="w-1.5 h-1.5 rounded-full bg-[#FF7A2F] mr-2.5" />
-                <Text className="text-[14px] text-[#475569] font-medium">Troca e manutenção de componentes no local</Text>
-              </View>
-              <View className="flex-row items-center">
-                <View className="w-1.5 h-1.5 rounded-full bg-[#FF7A2F] mr-2.5" />
-                <Text className="text-[14px] text-[#475569] font-medium">Revisão completa e teste final de segurança</Text>
-              </View>
+          {/* Card Distância */}
+          <View className="bg-white rounded-[20px] p-3 flex-1 border border-slate-100 shadow-sm flex-row items-center">
+            <View className="w-9 h-9 rounded-full bg-[#FFF6F0] items-center justify-center mr-2">
+              <Navigation color="#EA580C" size={18} strokeWidth={2.5} />
+            </View>
+            <View className="flex-1">
+              <Text className="text-[11px] font-extrabold text-[#1E293B] mb-0.5" numberOfLines={1}>2.5 km</Text>
+              <Text className="text-[10px] font-medium text-[#64748B]" numberOfLines={1}>de você</Text>
             </View>
           </View>
 
-          {/* Requisitos Pills */}
-          <View className="mb-6">
-            <Text className="text-[18px] font-extrabold text-[#1E293B] mb-3">
-              Requisitos
-            </Text>
-            <View className="flex-row flex-wrap gap-2.5">
-              <View className="bg-white border border-slate-200/90 px-4 py-2 rounded-full shadow-2xs">
-                <Text className="text-xs font-bold text-[#334155]">
-                  {job.categoryLabel || job.profession || 'Serviço Presencial'}
-                </Text>
-              </View>
-              <View className="bg-white border border-slate-200/90 px-4 py-2 rounded-full shadow-2xs">
-                <Text className="text-xs font-bold text-[#334155]">Ferramentas Próprias</Text>
-              </View>
-              <View className="bg-white border border-slate-200/90 px-4 py-2 rounded-full shadow-2xs">
-                <Text className="text-xs font-bold text-[#334155]">Pontualidade</Text>
-              </View>
-              <View className="bg-white border border-slate-200/90 px-4 py-2 rounded-full shadow-2xs">
-                <Text className="text-xs font-bold text-[#334155]">Atendimento Presencial</Text>
-              </View>
+          {/* Card Local */}
+          <View className="bg-white rounded-[20px] p-3 flex-1 border border-slate-100 shadow-sm flex-row items-center">
+            <View className="w-9 h-9 rounded-full bg-[#FFF6F0] items-center justify-center mr-2">
+              <MapPin color="#EA580C" size={18} strokeWidth={2.5} />
+            </View>
+            <View className="flex-1">
+              <Text className="text-[11px] font-extrabold text-[#1E293B] leading-tight" numberOfLines={2}>
+                {job.address?.cidade || 'São José do Rio Preto'}
+              </Text>
             </View>
           </View>
+        </View>
 
-          {/* Localização Aproximada Mapa Mockup */}
-          <View className="mb-6">
-            <Text className="text-[18px] font-extrabold text-[#1E293B] mb-3">
-              Localização Aproximada
-            </Text>
-            
-            <View className="bg-[#E2E8F0] h-40 rounded-[28px] overflow-hidden relative border border-slate-200 items-center justify-center shadow-xs">
+        {/* Lista Detalhada de Múltiplos Dias (Caso aplicável) */}
+        {job.selectedDates && job.selectedDates.length > 1 && (
+          <View className="px-5 mt-4">
+            <View className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm">
+              <Text className="text-[14px] font-extrabold text-[#1E293B] mb-2">Cronograma de Atendimento</Text>
+              {job.selectedDates.map((dateKey: string, index: number) => {
+                const sched = job.dateSchedules?.[dateKey];
+                const timeStr = sched && sched.startTime && sched.endTime 
+                  ? `${formatTimeShort(sched.startTime)} - ${formatTimeShort(sched.endTime)}` 
+                  : (job.scheduleType === 'same' && job.startTime && job.endTime ? `${formatTimeShort(job.startTime)} - ${formatTimeShort(job.endTime)}` : 'Horário a combinar');
+                
+                return (
+                  <View key={dateKey} className="flex-row items-center py-2 border-b border-slate-50 last:border-0">
+                    <View className="w-1.5 h-1.5 rounded-full bg-[#EA580C] mr-2.5" />
+                    <Text className="text-[13px] font-semibold text-[#334155] flex-1">
+                      {formatDateShort(dateKey)}
+                    </Text>
+                    <Text className="text-[13px] font-bold text-[#EA580C]">
+                      {timeStr}
+                    </Text>
+                  </View>
+                );
+              })}
+            </View>
+          </View>
+        )}
+
+        {/* ===== SOBRE O SERVIÇO ===== */}
+        <View className="px-5 mt-8">
+          <Text className="text-[18px] font-extrabold text-[#1E293B] mb-3">
+            Sobre o serviço
+          </Text>
+          <Text className="text-[#475569] text-[15px] leading-relaxed mb-4">
+            {job.description}
+          </Text>
+
+          {/* Galeria de Fotos (Se houver) */}
+          {job.photos && job.photos.length > 0 && (
+            <View className="mt-2 mb-4">
+              <Text className="text-[14px] font-extrabold text-[#1E293B] mb-3">Fotos do local / referência</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} className="overflow-visible">
+                {job.photos.map((photoUri: string, index: number) => (
+                  <Image 
+                    key={index} 
+                    source={{ uri: photoUri }} 
+                    className="w-28 h-28 rounded-2xl mr-3 bg-slate-200"
+                    resizeMode="cover"
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          )}
+        </View>
+
+        {/* ===== REQUISITOS ===== */}
+        <View className="px-5 mt-6">
+          <Text className="text-[18px] font-extrabold text-[#1E293B] mb-4">
+            O que você precisa ter
+          </Text>
+          <View className="flex-row flex-wrap gap-3">
+            <View className="bg-[#FFF6F0] px-4 py-2.5 rounded-full flex-row items-center">
+              <Star color="#EA580C" fill="#EA580C" size={14} className="mr-2" />
+              <Text className="text-[13px] font-bold text-[#1E293B]">Experiência na área</Text>
+            </View>
+            <View className="bg-[#FFF6F0] px-4 py-2.5 rounded-full flex-row items-center">
+              <Clock color="#EA580C" size={14} className="mr-2" />
+              <Text className="text-[13px] font-bold text-[#1E293B]">Pontualidade</Text>
+            </View>
+            <View className="bg-[#FFF6F0] px-4 py-2.5 rounded-full flex-row items-center">
+              <Users color="#EA580C" size={14} className="mr-2" />
+              <Text className="text-[13px] font-bold text-[#1E293B]">Atendimento presencial</Text>
+            </View>
+          </View>
+        </View>
+
+        {/* ===== LOCALIZAÇÃO ===== */}
+        <View className="px-5 mt-8 mb-6">
+          <Text className="text-[18px] font-extrabold text-[#1E293B] mb-4">
+            Localização {job.hideExactLocationUntilHired !== false ? 'aproximada' : 'exata'}
+          </Text>
+          
+          <View className="bg-[#E2E8F0] h-[160px] rounded-[24px] overflow-hidden relative border border-slate-200 items-center justify-center shadow-xs">
+            {job.coordinates ? (
+              <MapView
+                style={{ width: '100%', height: '100%' }}
+                initialRegion={{
+                  latitude: job.coordinates.latitude,
+                  longitude: job.coordinates.longitude,
+                  latitudeDelta: job.hideExactLocationUntilHired !== false ? 0.015 : 0.005,
+                  longitudeDelta: job.hideExactLocationUntilHired !== false ? 0.015 : 0.005,
+                }}
+                scrollEnabled={false}
+                zoomEnabled={false}
+              >
+                {job.hideExactLocationUntilHired !== false ? (
+                  <Circle
+                    center={job.coordinates}
+                    radius={500}
+                    fillColor="rgba(234, 88, 12, 0.2)"
+                    strokeColor="rgba(234, 88, 12, 0.6)"
+                    strokeWidth={2}
+                  />
+                ) : (
+                  <Marker coordinate={job.coordinates}>
+                    <View className="w-10 h-10 rounded-full bg-white shadow-md items-center justify-center">
+                      <MapPin color="#EA580C" size={20} strokeWidth={2.6} fill="#EA580C" />
+                    </View>
+                  </Marker>
+                )}
+              </MapView>
+            ) : (
               <Image
                 source={{ uri: 'https://images.unsplash.com/photo-1524661135-423995f22d0b?w=800&auto=format&fit=crop&q=80' }}
                 className="w-full h-full resize-cover opacity-80"
               />
-              <View className="absolute inset-0 bg-slate-900/10 items-center justify-center">
-                <View className="w-13 h-13 rounded-full bg-white shadow-lg items-center justify-center border border-orange-100">
-                  <MapPin color="#FF7A2F" size={26} strokeWidth={2.6} />
+            )}
+            
+            {/* Overlay if there's no coordinates or just as styling */}
+            {!job.coordinates && (
+              <View className="absolute inset-0 bg-white/40 items-center justify-center">
+                <View className="w-12 h-12 rounded-full bg-white shadow-md items-center justify-center">
+                  <MapPin color="#EA580C" size={24} strokeWidth={2.6} fill="#EA580C" />
+                </View>
+                <View className="bg-white/90 px-3 py-1 rounded-full mt-2 shadow-sm">
+                  <Text className="text-[11px] font-bold text-[#1E293B]">{job.address?.cidade || 'São José do Rio Preto'}</Text>
                 </View>
               </View>
-            </View>
-
-            <Text className="text-xs font-semibold text-[#64748B] text-center mt-2.5">
-              📍 O endereço exato será revelado após a confirmação.
-            </Text>
+            )}
           </View>
 
-          {/* Perfil do Contratante */}
-          <View className="bg-white rounded-[24px] p-4.5 border border-slate-100 shadow-sm flex-row items-center justify-between mb-4">
+          <View className="flex-row items-center mt-3 ml-1">
+            <View className="w-4 h-4 rounded-full bg-[#EA580C] items-center justify-center mr-2">
+              <Text className="text-white text-[9px] font-extrabold">i</Text>
+            </View>
+            <Text className="text-[12px] font-medium text-[#64748B] flex-1">
+              {job.hideExactLocationUntilHired !== false 
+                ? '📍 A localização é nessa região. O endereço exato será revelado após a confirmação.' 
+                : '📍 Endereço exato divulgado pelo contratante.'}
+            </Text>
+          </View>
+        </View>
+
+        {/* ===== PERFIL DO CONTRATANTE ===== */}
+        <View className="px-5 mb-6">
+          <View className="bg-white rounded-[24px] p-4 border border-slate-100 shadow-sm flex-row items-center justify-between">
             <View className="flex-row items-center flex-1 pr-3">
-              <View className="w-13 h-13 rounded-full bg-[#1E293B] items-center justify-center mr-3.5 shadow-xs">
-                <Text className="text-white font-extrabold text-lg">
-                  {(job.clientName || 'Ricardo Mendes')[0]}
+              <View className="w-12 h-12 rounded-full bg-[#FFF6F0] items-center justify-center mr-3 border border-[#FFE5D3]">
+                <Text className="text-[#EA580C] font-extrabold text-lg">
+                  {(job.clientName || 'Mariana S.')[0].toUpperCase()}
                 </Text>
               </View>
               <View>
-                <Text className="text-base font-extrabold text-[#1E293B]">
-                  {job.clientName || 'Ricardo Mendes'}
-                </Text>
-                <View className="flex-row items-center mt-1">
-                  <Star color="#FF7A2F" fill="#FF7A2F" size={14} className="mr-1" />
-                  <Text className="text-xs font-extrabold text-[#1E293B]">
-                    {job.clientRating || '4.9'}
+                <View className="flex-row items-center">
+                  <Text className="text-[15px] font-extrabold text-[#1E293B] mr-1.5">
+                    {job.clientName || 'Mariana S.'}
                   </Text>
-                  <Text className="text-xs text-[#64748B] font-medium ml-1">
-                    • {job.clientJobsCount || '24'} contratações
+                  <View className="w-3.5 h-3.5 bg-blue-500 rounded-full items-center justify-center">
+                    <CheckCircle2 color="#FFF" size={10} strokeWidth={3} />
+                  </View>
+                </View>
+                <View className="flex-row items-center mt-0.5">
+                  <Text className="text-[12px] font-extrabold text-[#1E293B] mr-1">
+                    {job.clientRating || '4,9'}
+                  </Text>
+                  <Star color="#EA580C" fill="#EA580C" size={11} className="mr-1.5" />
+                  <Text className="text-[12px] text-[#64748B] font-medium">
+                    • {job.clientJobsCount || '12'} contratações
                   </Text>
                 </View>
               </View>
             </View>
 
-            <TouchableOpacity 
-              activeOpacity={0.8}
-              onPress={() => Alert.alert('Perfil Verificado', `O contratante ${job.clientName || 'Ricardo Mendes'} possui identidade verificada e histórico de excelentes avaliações na plataforma.`)}
-            >
-              <Text className="text-xs font-extrabold text-[#FF7A2F]">Ver perfil</Text>
+            <TouchableOpacity activeOpacity={0.8} onPress={() => Alert.alert('Perfil Verificado', `O contratante ${job.clientName || 'Mariana S.'} possui identidade verificada na plataforma.`)}>
+              <Text className="text-[13px] font-extrabold text-[#EA580C]">Ver perfil {'>'}</Text>
             </TouchableOpacity>
           </View>
         </View>
       </ScrollView>
 
-      {/* Barra de Ação Fixa Inferior (TOTAL ESTIMADO + Candidatar-se) */}
+      {/* ===== BARRA INFERIOR (FOOTER) ===== */}
       <View 
-        className="px-6 py-4 bg-white border-t border-slate-100 flex-row items-center justify-between absolute bottom-0 left-0 right-0 z-30 shadow-lg"
+        className="px-6 py-4 bg-white border-t border-slate-100 flex-row items-center justify-between absolute bottom-0 left-0 right-0 z-30 shadow-2xl"
         style={{
           ...Platform.select({
-            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -6 }, shadowOpacity: 0.06, shadowRadius: 10 },
-            android: { elevation: 16 }
+            ios: { shadowColor: '#000', shadowOffset: { width: 0, height: -10 }, shadowOpacity: 0.04, shadowRadius: 12 },
+            android: { elevation: 20 }
           })
         }}
       >
-        <View>
-          <Text className="text-[10px] font-extrabold text-[#8C7A6B] uppercase tracking-wider">
-            TOTAL ESTIMADO
-          </Text>
-          <Text className="text-[22px] font-extrabold text-[#1E293B] mt-0.5">
-            {job.priceLabel || `R$ ${job.price || '300,00'}`}
-          </Text>
-          <Text className="text-[10.5px] font-semibold text-[#94A3B8]">
-            Baseado na demanda
+        <View className="flex-1">
+          <Text className="text-[11px] font-semibold text-[#64748B] mb-0.5">Pagamento</Text>
+          <Text className="text-[20px] font-extrabold text-[#1E293B]">
+            {job.priceLabel || `R$ ${job.price || '150,00'}`}
           </Text>
         </View>
 
@@ -475,19 +600,18 @@ export default function JobDetailsScreen({ route, navigation }: any) {
           <TouchableOpacity
             activeOpacity={0.88}
             onPress={handleCancelProposal}
-            className="bg-red-500 rounded-2xl px-6 py-4 flex-row items-center justify-center shadow-md"
+            className="bg-red-500 rounded-2xl px-6 py-4 flex-row items-center justify-center flex-[1.4] shadow-sm"
           >
-            <Text className="text-white font-extrabold text-[14px] mr-2">Cancelar Proposta</Text>
-            <X color="#FFFFFF" size={17} strokeWidth={2.8} />
+            <Text className="text-white font-extrabold text-[15px] mr-2">Cancelar Proposta</Text>
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
             activeOpacity={0.88}
             onPress={() => setShowProposalModal(true)}
-            className="bg-[#16A34A] rounded-2xl px-7 py-4 flex-row items-center justify-center shadow-md"
+            className="bg-[#EA580C] rounded-2xl px-6 py-4 flex-row items-center justify-center flex-[1.4] shadow-sm"
           >
-            <Text className="text-white font-extrabold text-base mr-2">Candidatar-se</Text>
-            <ArrowRight color="#FFFFFF" size={19} strokeWidth={2.8} />
+            <Text className="text-white font-extrabold text-[15px] mr-1.5">Quero me candidatar</Text>
+            <ArrowRight color="#FFFFFF" size={18} strokeWidth={2.8} />
           </TouchableOpacity>
         )}
       </View>

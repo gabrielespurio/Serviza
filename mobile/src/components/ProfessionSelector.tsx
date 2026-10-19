@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { View, Text, TextInput, TouchableOpacity, ScrollView, Modal, Platform, ActivityIndicator } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Search, X, ChevronRight, ListFilter, ArrowLeft, Check, Sparkles, Briefcase } from './icons';
 import { JOB_CATEGORIES, JobCategory } from '../data/jobCategories';
 import { CategoryIcon } from './CategoryIcon';
@@ -55,8 +56,27 @@ export default function ProfessionSelector({
   const [isSearching, setIsSearching] = useState(false);
   const [showCategoriesModal, setShowCategoriesModal] = useState(false);
   const [activeCategoryForBrowse, setActiveCategoryForBrowse] = useState<JobCategory | null>(null);
+  const [userCategories, setUserCategories] = useState<string[]>([]);
   
   const timerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Load user categories from local storage
+  useEffect(() => {
+    const loadUserData = async () => {
+      try {
+        const raw = await AsyncStorage.getItem('@ContrataAI:userData');
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          if (parsed.categories && Array.isArray(parsed.categories)) {
+            setUserCategories(parsed.categories);
+          }
+        }
+      } catch (e) {
+        console.log('Error loading user categories for suggestions', e);
+      }
+    };
+    loadUserData();
+  }, []);
 
   // Debounce search query (~300ms)
   useEffect(() => {
@@ -80,8 +100,33 @@ export default function ProfessionSelector({
   // Instant filtering based on debounced query
   const filteredProfessions = useMemo(() => {
     if (!debouncedQuery.trim()) {
-      // Return top 8 popular/suggested professions when query is empty
-      return ALL_PROFESSIONS.slice(0, 8);
+      if (userCategories.length > 0) {
+        // Find top 3 professions from each user favorite category
+        const suggestions: FlatProfessionItem[] = [];
+        userCategories.forEach(catId => {
+          const profs = ALL_PROFESSIONS.filter(p => p.categoryId === catId).slice(0, 3);
+          suggestions.push(...profs);
+        });
+        
+        // If we still need more to fill the list, pad with generic suggestions
+        if (suggestions.length < 8) {
+          const others = ALL_PROFESSIONS.filter(p => !suggestions.includes(p)).slice(0, 8 - suggestions.length);
+          suggestions.push(...others);
+        }
+        return suggestions;
+      }
+      
+      // Global mix if no user categories (pick 1 popular from the first 8 distinct categories)
+      const distinctCats = new Set<string>();
+      const mix: FlatProfessionItem[] = [];
+      for (const p of ALL_PROFESSIONS) {
+        if (!distinctCats.has(p.categoryId)) {
+          distinctCats.add(p.categoryId);
+          mix.push(p);
+        }
+        if (mix.length === 8) break;
+      }
+      return mix;
     }
     const normalized = normalizeText(debouncedQuery.trim());
     return ALL_PROFESSIONS.filter(
@@ -89,7 +134,7 @@ export default function ProfessionSelector({
         item.normalizedProfession.includes(normalized) ||
         item.normalizedCategory.includes(normalized)
     );
-  }, [debouncedQuery]);
+  }, [debouncedQuery, userCategories]);
 
   const handleSelect = (item: { profession: string; categoryId: string; categoryLabel: string }) => {
     setQuery('');
@@ -276,10 +321,10 @@ export default function ProfessionSelector({
               <View>
                 <View className="bg-white rounded-3xl p-5 border border-slate-100 mb-4 flex-row items-center">
                   <View
-                    className="w-12 h-12 rounded-2xl items-center justify-center mr-3.5"
-                    style={{ backgroundColor: activeCategoryForBrowse.bgColor }}
+                    className="w-14 h-14 rounded-2xl items-center justify-center mr-3.5"
+                    style={{ backgroundColor: 'transparent' }}
                   >
-                    <CategoryIcon category={activeCategoryForBrowse.id} color={activeCategoryForBrowse.color} size={22} />
+                    <CategoryIcon category={activeCategoryForBrowse.id} color={activeCategoryForBrowse.color} size={28} />
                   </View>
                   <View>
                     <Text className="text-[#1E293B] text-lg font-extrabold">
@@ -338,10 +383,10 @@ export default function ProfessionSelector({
                   >
                     <View className="flex-row items-center flex-1 pr-3">
                       <View
-                        className="w-11 h-11 rounded-2xl items-center justify-center mr-3.5"
-                        style={{ backgroundColor: cat.bgColor }}
+                        className="w-12 h-12 rounded-2xl items-center justify-center mr-3.5"
+                        style={{ backgroundColor: 'transparent' }}
                       >
-                        <CategoryIcon category={cat.id} color={cat.color} size={20} />
+                        <CategoryIcon category={cat.id} color={cat.color} size={24} />
                       </View>
                       <View className="flex-1">
                         <Text className="text-[16px] font-extrabold text-[#1E293B]">

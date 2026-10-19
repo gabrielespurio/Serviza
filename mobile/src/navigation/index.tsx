@@ -15,13 +15,13 @@ import JobDetailsScreen from '../screens/prestador/JobDetailsScreen';
 import ChatScreen from '../screens/ChatScreen';
 import VagasScreen from '../screens/contratante/VagasScreen';
 import ProfessionalProfileScreen from '../screens/contratante/ProfessionalProfileScreen';
+import EditProfileScreen from '../screens/EditProfileScreen';
 
 const Stack = createNativeStackNavigator();
 
 export default function RootNavigator() {
   return (
-    <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <NavigationContainer><Stack.Navigator screenOptions={{ headerShown: false }}>
         <Stack.Screen name="Onboarding" component={OnboardingScreen} />
         <Stack.Screen name="RegisterScreen" component={RegisterScreen} />
         <Stack.Screen name="Login" component={LoginScreen} />
@@ -34,7 +34,7 @@ export default function RootNavigator() {
         <Stack.Screen name="ChatScreen" component={ChatScreen} />
         <Stack.Screen name="Vagas" component={VagasScreen} />
         <Stack.Screen name="ProfessionalProfile" component={ProfessionalProfileScreen} />
-      </Stack.Navigator>
-    </NavigationContainer>
+        <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+      </Stack.Navigator></NavigationContainer>
   );
 }

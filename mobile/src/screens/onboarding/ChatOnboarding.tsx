@@ -39,6 +39,7 @@ interface Message {
   id: string;
   sender: 'bot' | 'user';
   text: string;
+  imageUri?: string;
 }
 
 // ====== COMPONENT ======
@@ -143,8 +144,8 @@ export default function ChatOnboarding({ route, navigation }: any) {
     }, delay);
   }, [scrollToBottom]);
 
-  const addUserMessage = useCallback((text: string) => {
-    setMessages(prev => [...prev, { id: `user-${Date.now()}-${Math.random()}`, sender: 'user', text }]);
+  const addUserMessage = useCallback((text: string, imageUri?: string) => {
+    setMessages(prev => [...prev, { id: `user-${Date.now()}-${Math.random()}`, sender: 'user', text, imageUri }]);
     scrollToBottom();
   }, [scrollToBottom]);
 
@@ -306,25 +307,29 @@ export default function ChatOnboarding({ route, navigation }: any) {
           exif: false,
         });
       } else {
-        // Solicitar permissão de galeria
-        const libraryPermission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!libraryPermission.granted) {
-          addBotMessage('Precisamos da permissão para acessar suas fotos. Tente novamente.');
+        // Em versões recentes do iOS e Android, o Photo Picker nativo não requer permissão explícita
+        // de leitura de disco, pois ele roda isolado. Tentar pedir permissão pode retornar false automaticamente.
+        addUserMessage('🖼️ Abrir galeria');
+        try {
+          result = await ImagePicker.launchImageLibraryAsync({
+            mediaTypes: ImagePicker.MediaTypeOptions.Images,
+            allowsEditing: true,
+            aspect: [1, 1],
+            quality: 0.6,
+            exif: false,
+          });
+        } catch (e) {
+          addBotMessage('Não foi possível abrir a galeria. Tente novamente ou pule esta etapa.');
           return;
         }
-        addUserMessage('🖼️ Abrir galeria');
-        result = await ImagePicker.launchImageLibraryAsync({
-          mediaTypes: ImagePicker.MediaTypeOptions.Images,
-          allowsEditing: true,
-          aspect: [1, 1],
-          quality: 0.6,
-          exif: false,
-        });
       }
 
       if (!result.canceled && result.assets && result.assets.length > 0) {
         const uri = result.assets[0].uri;
         setAvatarUri(uri);
+        
+        // Enviar a imagem como mensagem no chat
+        addUserMessage('Minha foto de perfil', uri);
         
         // Salvar imediatamente no AsyncStorage para disponibilizar no perfil
         await AsyncStorage.setItem('@ContrataAI:avatarUrl', uri);
@@ -441,6 +446,11 @@ export default function ChatOnboarding({ route, navigation }: any) {
       const emailKey = payload.email.toLowerCase().trim();
       await AsyncStorage.setItem(`@ContrataAI:profile:${emailKey}`, JSON.stringify(profileData));
 
+      // Salvar avatar vinculado ao email para restauração futura após logout
+      if (avatarUri) {
+        await AsyncStorage.setItem(`@ContrataAI:avatar:${emailKey}`, avatarUri);
+      }
+
       if (finalRole === 'PRESTADOR') {
         await AsyncStorage.setItem('@ContrataAI:userRole', 'prestador');
         navigation.replace('MainPrestador');
@@ -549,10 +559,10 @@ export default function ChatOnboarding({ route, navigation }: any) {
               <View 
                 style={{
                   maxWidth: '75%',
-                  padding: 14,
+                  padding: msg.imageUri ? 4 : 14,
                   borderRadius: 20,
                   ...(msg.sender === 'user' 
-                    ? { backgroundColor: '#FF7A2F', borderBottomRightRadius: 4 }
+                    ? { backgroundColor: msg.imageUri ? 'transparent' : '#FF7A2F', borderBottomRightRadius: msg.imageUri ? 20 : 4 }
                     : { backgroundColor: '#FFFFFF', borderBottomLeftRadius: 4, borderWidth: 1, borderColor: '#F1F5F9',
                         ...Platform.select({
                           ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.06, shadowRadius: 4 },
@@ -562,13 +572,30 @@ export default function ChatOnboarding({ route, navigation }: any) {
                   ),
                 }}
               >
-                <Text style={{ 
-                  fontSize: 15, lineHeight: 22, fontWeight: '500',
-                  color: msg.sender === 'user' ? '#FFFFFF' : '#1E293B' 
-                }}>
-                  {msg.text}
-                </Text>
+                {msg.imageUri ? (
+                  <View style={{ borderRadius: 18, overflow: 'hidden', borderWidth: 2, borderColor: '#FF7A2F' }}>
+                    <Image source={{ uri: msg.imageUri }} style={{ width: 160, height: 160 }} resizeMode="cover" />
+                  </View>
+                ) : (
+                  <Text style={{ 
+                    fontSize: 15, lineHeight: 22, fontWeight: '500',
+                    color: msg.sender === 'user' ? '#FFFFFF' : '#1E293B' 
+                  }}>
+                    {msg.text}
+                  </Text>
+                )}
               </View>
+
+              {/* Avatar do Usuário para mensagens dele */}
+              {msg.sender === 'user' && avatarUri && (
+                <View style={{ width: 32, height: 32, borderRadius: 16, marginLeft: 8, marginBottom: 2, overflow: 'hidden', borderWidth: 1.5, borderColor: '#FFFFFF', backgroundColor: '#E2E8F0', elevation: 1 }}>
+                  <Image 
+                    source={{ uri: avatarUri }} 
+                    style={{ width: 32, height: 32, borderRadius: 16 }}
+                    resizeMode="cover"
+                  />
+                </View>
+              )}
             </View>
           ))}
           

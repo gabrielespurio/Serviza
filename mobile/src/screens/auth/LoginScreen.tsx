@@ -16,13 +16,13 @@ export default function LoginScreen({ navigation }: any) {
   const getLocalProfile = async (userEmail: string) => {
     const emailKey = userEmail.toLowerCase().trim();
     
-    // 1. Fonte PRIMÁRIA: chave permanente salva no onboarding (nunca é sobrescrita pelo login)
+    // 1. Fonte PRIMÁRIA: chave permanente vinculada ao email (salva no onboarding e atualizada no login)
     const permanentProfile = await AsyncStorage.getItem(`@ContrataAI:profile:${emailKey}`);
     if (permanentProfile) {
       return JSON.parse(permanentProfile);
     }
     
-    // 2. Fallback: userData genérico (pode ter sido corrompido por login anterior)
+    // 2. Fallback: userData genérico — MAS só usar se o email bater EXATAMENTE
     const userData = await AsyncStorage.getItem('@ContrataAI:userData');
     if (userData) {
       const parsed = JSON.parse(userData);
@@ -31,12 +31,8 @@ export default function LoginScreen({ navigation }: any) {
       }
     }
     
-    // 3. Último recurso: userRole salvo
-    const savedRole = await AsyncStorage.getItem('@ContrataAI:userRole');
-    if (savedRole) {
-      return { role: savedRole === 'prestador' ? 'PRESTADOR' : 'CONTRATANTE' };
-    }
-    
+    // 3. NÃO usar @ContrataAI:userRole como fallback — esse valor pode pertencer
+    //    a outro usuário que fez login por último. Melhor retornar null.
     return null;
   };
 
@@ -85,6 +81,16 @@ export default function LoginScreen({ navigation }: any) {
       await AsyncStorage.setItem('@ContrataAI:userData', JSON.stringify(userDataToSave));
       await AsyncStorage.setItem('@ContrataAI:userRole', userRole === 'PRESTADOR' ? 'prestador' : 'contratante');
 
+      // Salvar/atualizar perfil permanente vinculado ao email para futuros logins offline
+      const emailKey = (userDataToSave.email || email).toLowerCase().trim();
+      await AsyncStorage.setItem(`@ContrataAI:profile:${emailKey}`, JSON.stringify(userDataToSave));
+
+      // Restaurar avatar salvo por email (se existir)
+      const savedAvatar = await AsyncStorage.getItem(`@ContrataAI:avatar:${emailKey}`);
+      if (savedAvatar) {
+        await AsyncStorage.setItem('@ContrataAI:avatarUrl', savedAvatar);
+      }
+
       if (userRole === 'PRESTADOR') {
         navigation.replace('MainPrestador');
       } else {
@@ -107,9 +113,17 @@ export default function LoginScreen({ navigation }: any) {
         };
         
         await AsyncStorage.setItem('@ContrataAI:userData', JSON.stringify(profileToRestore));
-        await AsyncStorage.setItem('@ContrataAI:userRole', localProfile.role === 'PRESTADOR' ? 'prestador' : 'contratante');
+        const normalizedRole = localProfile.role === 'PRESTADOR' ? 'prestador' : 'contratante';
+        await AsyncStorage.setItem('@ContrataAI:userRole', normalizedRole);
 
-        if (localProfile.role === 'PRESTADOR') {
+        // Restaurar avatar salvo por email
+        const emailKey = (localProfile.email || email).toLowerCase().trim();
+        const savedAvatar = await AsyncStorage.getItem(`@ContrataAI:avatar:${emailKey}`);
+        if (savedAvatar) {
+          await AsyncStorage.setItem('@ContrataAI:avatarUrl', savedAvatar);
+        }
+
+        if (normalizedRole === 'prestador') {
           navigation.replace('MainPrestador');
         } else {
           navigation.replace('MainContratante');

@@ -12,6 +12,7 @@ import Camera from 'lucide-react-native/dist/esm/icons/camera.mjs';
 import Car from 'lucide-react-native/dist/esm/icons/car.mjs';
 import Check from 'lucide-react-native/dist/esm/icons/check.mjs';
 import CheckCircle2 from 'lucide-react-native/dist/esm/icons/circle-check-big.mjs';
+import ChevronLeft from 'lucide-react-native/dist/esm/icons/chevron-left.mjs';
 import ChevronRight from 'lucide-react-native/dist/esm/icons/chevron-right.mjs';
 import Clock from 'lucide-react-native/dist/esm/icons/clock.mjs';
 import Cog from 'lucide-react-native/dist/esm/icons/cog.mjs';
@@ -86,6 +87,7 @@ export {
   Car,
   Check,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   Clock,
   Cog,

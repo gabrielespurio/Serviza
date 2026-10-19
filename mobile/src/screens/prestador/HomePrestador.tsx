@@ -116,8 +116,16 @@ export default function HomePrestador({ navigation }: any) {
         }
       } catch (e) {}
 
-      const rawLocalJobs = await AsyncStorage.getItem('@ContrataAI:myJobs');
-      const localJobs = rawLocalJobs ? JSON.parse(rawLocalJobs) : [];
+      let localJobs = [];
+      try {
+        const rawLocalJobs = await AsyncStorage.getItem('@ContrataAI:myJobs');
+        if (rawLocalJobs) {
+          const parsed = JSON.parse(rawLocalJobs);
+          localJobs = Array.isArray(parsed) ? parsed : (parsed.id ? [parsed] : []);
+        }
+      } catch (e) {
+        console.log('Erro no JSON parse do myJobs:', e);
+      }
 
       const formattedLocal = localJobs.map((j: any) => ({
         id: j.id,

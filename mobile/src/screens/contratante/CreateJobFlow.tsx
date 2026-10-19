@@ -20,9 +20,14 @@ export interface JobFormData {
   profession: string;
   title: string;
   description: string;
-  date: Date | null;
+  photos: string[];
+  selectedDates: string[]; // ISO date strings 'YYYY-MM-DD'
+  scheduleType: 'same' | 'different' | '';
+  dateSchedules: { [dateKey: string]: { startTime: Date | null; endTime: Date | null } };
   startTime: Date | null;
   endTime: Date | null;
+  date: Date | null; // backward compat — populated from selectedDates[0] at publish
+  hideExactLocationUntilHired: boolean;
   locationType: 'gps' | 'cep' | 'manual' | '';
   address: {
     cep: string;
@@ -45,9 +50,14 @@ const INITIAL_DATA: JobFormData = {
   profession: '',
   title: '',
   description: '',
-  date: null,
+  photos: [],
+  selectedDates: [],
+  scheduleType: '',
+  dateSchedules: {},
   startTime: null,
   endTime: null,
+  date: null,
+  hideExactLocationUntilHired: true, // Default to true for privacy
   locationType: '',
   address: { cep: '', estado: '', cidade: '', bairro: '', rua: '', numero: '', complemento: '' },
   coordinates: null,
@@ -113,7 +123,7 @@ export default function CreateJobFlow({ navigation }: any) {
             {
               text: 'Continuar',
               onPress: () => {
-                setData(parsed.data);
+                setData({ ...INITIAL_DATA, ...parsed.data });
                 setCurrentStep(parsed.step || 0);
                 setDraftLoaded(true);
               },
@@ -155,13 +165,24 @@ export default function CreateJobFlow({ navigation }: any) {
         if (!data.description.trim()) return 'Descreva o serviço que será realizado.';
         return null;
       case 1:
-        if (!data.date) return 'Selecione a data do serviço.';
-        if (!data.startTime) return 'Informe o horário de início.';
-        if (!data.endTime) return 'Informe o horário de término.';
-        if (data.startTime && data.endTime) {
-          const s = data.startTime.getHours() * 60 + data.startTime.getMinutes();
-          const e = data.endTime.getHours() * 60 + data.endTime.getMinutes();
-          if (e <= s) return 'O horário de término deve ser maior que o de início.';
+        if (data.selectedDates.length === 0) return 'Selecione pelo menos uma data para o serviço.';
+        if (data.selectedDates.length === 1 || data.scheduleType === 'same') {
+          if (!data.startTime) return 'Informe o horário de início.';
+          if (!data.endTime) return 'Informe o horário de término.';
+          if (data.startTime && data.endTime) {
+            const s = data.startTime.getHours() * 60 + data.startTime.getMinutes();
+            const e = data.endTime.getHours() * 60 + data.endTime.getMinutes();
+            if (e <= s) return 'O horário de término deve ser maior que o de início.';
+          }
+        } else if (data.scheduleType === 'different') {
+          for (const dateKey of data.selectedDates) {
+            const schedule = data.dateSchedules[dateKey];
+            if (!schedule?.startTime || !schedule?.endTime) {
+              return `Preencha os horários do dia ${dateKey.split('-').reverse().join('/')}.`;
+            }
+          }
+        } else if (data.selectedDates.length > 1) {
+          return 'Escolha se os horários serão iguais ou diferentes.';
         }
         if (!data.locationType) return 'Escolha como informar o endereço.';
         if (!data.address.cidade) return 'Informe a cidade.';
@@ -221,6 +242,12 @@ export default function CreateJobFlow({ navigation }: any) {
         paymentType: data.paymentType,
         paymentMethod: data.paymentMethod,
         status: 'OPEN',
+        // Novos campos
+        selectedDates: data.selectedDates,
+        scheduleType: data.scheduleType,
+        dateSchedules: data.dateSchedules,
+        photos: data.photos,
+        hideExactLocationUntilHired: data.hideExactLocationUntilHired,
       };
 
       try {
@@ -233,6 +260,7 @@ export default function CreateJobFlow({ navigation }: any) {
       try {
         const rawJobs = await AsyncStorage.getItem('@ContrataAI:myJobs');
         const existingJobs = rawJobs ? JSON.parse(rawJobs) : [];
+        const firstDate = data.selectedDates.length > 0 ? data.selectedDates[0] : new Date().toISOString().split('T')[0];
         const newJob = {
           id: Date.now().toString(),
           title: data.title,
@@ -240,7 +268,11 @@ export default function CreateJobFlow({ navigation }: any) {
           category: data.category,
           categoryLabel: data.categoryLabel || data.category,
           profession: data.profession,
-          date: data.date ? data.date.toISOString() : null,
+          photos: data.photos || [],
+          selectedDates: data.selectedDates,
+          scheduleType: data.scheduleType,
+          dateSchedules: data.dateSchedules,
+          date: firstDate,
           startTime: data.startTime ? data.startTime.toISOString() : null,
           endTime: data.endTime ? data.endTime.toISOString() : null,
           address: data.address,
@@ -317,52 +349,49 @@ export default function CreateJobFlow({ navigation }: any) {
 
         {/* ===== PROGRESS BAR ===== */}
         <View className="px-5 pt-5 pb-2 bg-white">
-          <View className="flex-row items-center justify-between mb-3">
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start' }}>
             {STEPS.map((step, i) => (
-              <View key={i} className="flex-row items-center flex-1">
-                {/* Dot */}
-                <View
-                  className={`w-8 h-8 rounded-full items-center justify-center ${
-                    i < currentStep
-                      ? 'bg-[#34D399]'
-                      : i === currentStep
-                      ? 'bg-[#F97316]'
-                      : 'bg-slate-200'
-                  }`}
-                >
-                  {i < currentStep ? (
-                    <Check color="#fff" size={14} strokeWidth={3} />
-                  ) : (
-                    <Text className={`text-xs font-bold ${i === currentStep ? 'text-white' : 'text-slate-400'}`}>
-                      {i + 1}
-                    </Text>
-                  )}
+              <React.Fragment key={i}>
+                {/* Step Column */}
+                <View style={{ alignItems: 'center', width: 60 }}>
+                  <View
+                    className={`w-8 h-8 rounded-full items-center justify-center ${
+                      i < currentStep
+                        ? 'bg-[#34D399]'
+                        : i === currentStep
+                        ? 'bg-[#F97316]'
+                        : 'bg-slate-200'
+                    }`}
+                  >
+                    {i < currentStep ? (
+                      <Check color="#fff" size={14} strokeWidth={3} />
+                    ) : (
+                      <Text className={`text-xs font-bold ${i === currentStep ? 'text-white' : 'text-slate-400'}`}>
+                        {i + 1}
+                      </Text>
+                    )}
+                  </View>
+                  <Text
+                    className={`text-[10px] font-semibold mt-1.5 text-center ${
+                      i === currentStep ? 'text-[#F97316]' : i < currentStep ? 'text-[#34D399]' : 'text-[#94A3B8]'
+                    }`}
+                    numberOfLines={1}
+                  >
+                    {step.label}
+                  </Text>
                 </View>
 
-                {/* Line */}
+                {/* Connector Line */}
                 {i < STEPS.length - 1 && (
-                  <View
-                    className={`flex-1 h-[2px] mx-1 ${
-                      i < currentStep ? 'bg-[#34D399]' : 'bg-slate-200'
-                    }`}
-                  />
+                  <View style={{ flex: 1, justifyContent: 'center', paddingTop: 4 }}>
+                    <View
+                      className={`h-[2px] ${
+                        i < currentStep ? 'bg-[#34D399]' : 'bg-slate-200'
+                      }`}
+                    />
+                  </View>
                 )}
-              </View>
-            ))}
-          </View>
-
-          {/* Step Labels */}
-          <View className="flex-row justify-between">
-            {STEPS.map((step, i) => (
-              <Text
-                key={i}
-                className={`text-[10px] font-semibold ${
-                  i === currentStep ? 'text-[#F97316]' : i < currentStep ? 'text-[#34D399]' : 'text-[#94A3B8]'
-                }`}
-                style={{ width: `${100 / STEPS.length}%` as any, textAlign: i === 0 ? 'left' : i === STEPS.length - 1 ? 'right' : 'center' }}
-              >
-                {step.label}
-              </Text>
+              </React.Fragment>
             ))}
           </View>
         </View>

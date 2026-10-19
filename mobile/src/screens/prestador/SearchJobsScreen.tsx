@@ -18,8 +18,16 @@ export default function SearchJobsScreen({ route, navigation }: any) {
     try {
       setRefreshing(true);
       // 1. Carregar vagas locais criadas pelo contratante (@ContrataAI:myJobs)
-      const rawLocal = await AsyncStorage.getItem('@ContrataAI:myJobs');
-      const localJobs = rawLocal ? JSON.parse(rawLocal) : [];
+      let localJobs = [];
+      try {
+        const rawLocal = await AsyncStorage.getItem('@ContrataAI:myJobs');
+        if (rawLocal) {
+          const parsed = JSON.parse(rawLocal);
+          localJobs = Array.isArray(parsed) ? parsed : (parsed.id ? [parsed] : []);
+        }
+      } catch (e) {
+        console.log('Erro no JSON parse do myJobs em SearchJobsScreen:', e);
+      }
 
       const formattedLocal = localJobs.map((j: any) => ({
         id: j.id,
