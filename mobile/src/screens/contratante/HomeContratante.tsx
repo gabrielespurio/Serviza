@@ -309,7 +309,7 @@ export default function HomeContratante({ navigation }: any) {
           <View className="flex-row justify-between items-center mb-4">
             <Text className="text-xl font-extrabold text-[#1E293B]">Minhas Vagas</Text>
             {myJobs.length > 0 && (
-              <TouchableOpacity onPress={() => navigation.navigate('Busca')}>
+              <TouchableOpacity onPress={() => navigation.navigate('Vagas')}>
                 <Text className="text-[#F97316] font-bold text-sm">Ver todas ({myJobs.length})</Text>
               </TouchableOpacity>
             )}
@@ -381,7 +381,11 @@ export default function HomeContratante({ navigation }: any) {
 
         {/* Footer */}
         <View className="px-6 pb-20 mt-2">
-          <TouchableOpacity className="w-full bg-[#FFF4ED] py-4 rounded-2xl flex-row justify-center items-center">
+          <TouchableOpacity 
+            activeOpacity={0.8}
+            onPress={() => navigation.navigate('Busca')}
+            className="w-full bg-[#FFF4ED] py-4 rounded-2xl flex-row justify-center items-center"
+          >
             <Text className="text-[#F97316] font-bold text-[15px] mr-2">Ver todos os profissionais</Text>
             <ArrowRight color="#F97316" size={18} />
           </TouchableOpacity>

@@ -1,6 +1,10 @@
 import { createClient } from '@supabase/supabase-js';
+import dotenv from 'dotenv';
 
-const supabaseUrl = process.env.SUPABASE_URL || '';
-const supabaseKey = process.env.SUPABASE_KEY || '';
+dotenv.config();
+
+const supabaseUrl = process.env.SUPABASE_URL || 'https://placeholder.supabase.co';
+const supabaseKey = process.env.SUPABASE_KEY || 'placeholder_anon_key';
 
 export const supabase = createClient(supabaseUrl, supabaseKey);
+

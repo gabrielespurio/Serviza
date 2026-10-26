@@ -1,36 +1,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Platform, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { 
   Briefcase, 
   Plus, 
   ChevronRight, 
-  Users, 
-  Mail, 
-  Sparkles, 
-  Paintbrush, 
-  Wrench, 
-  TreeDeciduous, 
-  Zap, 
-  Droplets, 
-  CalendarDays, 
-  Hammer, 
-  Truck, 
-  Heart, 
-  Scissors, 
-  Car, 
-  Dog, 
-  Cog, 
-  Sprout, 
-  Megaphone, 
-  Package, 
-  Monitor, 
-  FileText 
+  Users
 } from '../../components/icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Button } from '../../components/Button';
 import { api } from '../../services/api';
-import { JOB_CATEGORIES } from '../../data/jobCategories';
 import { CategoryIcon, getCategoryIconAndColors } from '../../components/CategoryIcon';
 
 export interface JobItem {
@@ -51,16 +30,11 @@ export interface JobItem {
   };
   paymentType?: string;
   paymentValue?: string;
+  price?: number;
   status: 'Ativa' | 'Concluída' | 'Pausada' | 'Rascunho' | 'Em análise' | 'Em Andamento' | string;
   proposalsCount?: number;
   createdAt?: string;
 }
-
-// Mapeamento de ícones e cores por categoria/profissão para os cards
-// Mapeamento de ícones e cores por categoria/profissão usando o serviço centralizado
-const getCategoryAppearance = (categoryLabel?: string, profession?: string) => {
-  return getCategoryIconAndColors(`${profession || ''} ${categoryLabel || ''}`);
-};
 
 const formatPostedDate = (isoString?: string | null): string => {
   if (!isoString) return 'Postado recentemente';
@@ -98,8 +72,8 @@ export default function VagasScreen({ navigation }: any) {
           serverJobs = res.data.map(item => ({
             ...item,
             status: item.status === 'OPEN' ? 'Ativa' : item.status === 'COMPLETED' ? 'Concluída' : item.status === 'IN_PROGRESS' ? 'Em Andamento' : item.status,
-            paymentValue: item.price ? item.price.toFixed(2).replace('.', ',') : item.paymentValue || '0,00',
-            proposalsCount: item.applications ? item.applications.length : (item.proposalsCount !== undefined ? item.proposalsCount : 0),
+            paymentValue: item.price ? (typeof item.price === 'number' ? item.price.toFixed(2).replace('.', ',') : String(item.price)) : item.paymentValue || '0,00',
+            proposalsCount: item.applications ? item.applications.length : 0,
             createdAt: item.createdAt || item.date || new Date().toISOString()
           }));
         }
@@ -119,7 +93,7 @@ export default function VagasScreen({ navigation }: any) {
           }
         });
 
-        // Carregar propostas globais e pessoais para contar exatamente quantas propostas reais cada vaga tem
+        // Carregar propostas reais salvas no storage
         const rawAllProps = await AsyncStorage.getItem('@ContrataAI:allProposals');
         const rawMyProps = await AsyncStorage.getItem('@ContrataAI:myProposals');
         const allProps = rawAllProps ? JSON.parse(rawAllProps) : [];
@@ -147,13 +121,14 @@ export default function VagasScreen({ navigation }: any) {
             return false;
           });
           
-          // Contagem 100% real: ou achou propostas no storage/combinado, ou veio da API em applications. NUNCA usar números aleatórios antigos!
+          // Contagem 100% REAL de propostas recebidas (sem valores fictícios forçados)
           const realCount = matchingProps.length > 0 
             ? matchingProps.length 
             : (j.applications && Array.isArray(j.applications) ? j.applications.length : 0);
 
           return {
             ...j,
+            paymentValue: j.paymentValue || (j.price ? (typeof j.price === 'number' ? j.price.toFixed(2).replace('.', ',') : String(j.price)) : '0,00'),
             createdAt: j.createdAt || j.date || new Date().toISOString(),
             proposalsCount: realCount
           };
@@ -189,14 +164,15 @@ export default function VagasScreen({ navigation }: any) {
 
   // Filtragem coerente com as abas do design (Ativas, Em Andamento, Finalizadas)
   const filteredJobs = jobs.filter(job => {
+    const statusLower = (job.status || 'Ativa').toLowerCase();
     if (filter === 'ativas') {
-      return job.status === 'Ativa' || job.status === 'OPEN' || job.status === 'Ativo' || !job.status;
+      return statusLower.includes('ativa') || statusLower === 'open' || !job.status;
     }
     if (filter === 'em_andamento') {
-      return job.status === 'Em Andamento' || job.status === 'IN_PROGRESS' || job.status === 'Em análise' || job.status === 'Pausada';
+      return statusLower.includes('andamento') || statusLower === 'in_progress' || statusLower.includes('análise') || statusLower.includes('analise') || statusLower.includes('pausada');
     }
     if (filter === 'finalizadas') {
-      return job.status === 'Finalizada' || job.status === 'Concluída' || job.status === 'COMPLETED' || job.status === 'CANCELLED';
+      return statusLower.includes('conclu') || statusLower.includes('finaliz') || statusLower === 'completed' || statusLower === 'cancelled';
     }
     return true;
   });
@@ -308,27 +284,31 @@ export default function VagasScreen({ navigation }: any) {
           </View>
         ) : (
           filteredJobs.map((job) => {
-            const appearance = getCategoryAppearance(job.categoryLabel || job.category, job.profession || job.title);
-            const IconComponent = appearance.icon;
-            const isAnalyzing = job.status === 'Em análise' || (job.proposalsCount && job.proposalsCount === 0);
+            const jobDetails = getCategoryIconAndColors(job.categoryLabel || job.profession || job.title);
+            const count = typeof job.proposalsCount === 'number' ? job.proposalsCount : 0;
             
             // Cor e texto da badge de status
             let badgeBg = '#DCFCE7';
             let badgeColor = '#15803D';
             let badgeText = 'Ativa';
 
-            if (job.status === 'Em análise') {
+            const statusLower = (job.status || 'Ativa').toLowerCase();
+            if (statusLower.includes('análise') || statusLower.includes('analise')) {
               badgeBg = '#FEF3C7';
               badgeColor = '#D97706';
               badgeText = 'Em análise';
-            } else if (job.status === 'Em Andamento' || job.status === 'IN_PROGRESS') {
+            } else if (statusLower.includes('andamento') || statusLower === 'in_progress') {
               badgeBg = '#E0F2FE';
               badgeColor = '#0369A1';
               badgeText = 'Em Andamento';
-            } else if (job.status === 'Concluída' || job.status === 'Finalizada') {
+            } else if (statusLower.includes('conclu') || statusLower.includes('finaliz') || statusLower === 'completed') {
               badgeBg = '#F1F5F9';
               badgeColor = '#475569';
               badgeText = 'Finalizada';
+            } else if (statusLower.includes('pausada')) {
+              badgeBg = '#FEE2E2';
+              badgeColor = '#B91C1C';
+              badgeText = 'Pausada';
             }
 
             return (
@@ -336,61 +316,78 @@ export default function VagasScreen({ navigation }: any) {
                 key={job.id}
                 activeOpacity={0.88}
                 onPress={() => navigation.navigate('JobProposals', { job })}
-                className="bg-white rounded-[28px] p-5 mb-4 shadow-sm border border-slate-100/90"
+                className="bg-white rounded-3xl p-5 mb-3.5 shadow-sm border border-slate-100"
               >
-                {/* Top Section — Ícone + Título + Badge */}
-                <View className="flex-row items-start justify-between mb-4">
+                {/* Linha Principal: Ícone da Categoria + Título/Subtítulo + Valor em R$ */}
+                <View className="flex-row items-center justify-between mb-3">
                   <View className="flex-row items-center flex-1 pr-3">
-                    {/* Caixa do ícone colorida com cantos arredondados */}
+                    {/* Ícone oficial da CATEGORIA com arte 3D ou vetor colorido */}
                     <View 
-                      className="w-14 h-14 rounded-2xl items-center justify-center mr-3.5"
-                      style={{ backgroundColor: appearance.bgColor }}
+                      className="rounded-2xl items-center justify-center mr-3.5 overflow-hidden"
+                      style={{ width: 50, height: 50, backgroundColor: jobDetails.bgColor || '#FFF4ED' }}
                     >
-                      <IconComponent color={appearance.color} size={24} strokeWidth={2.2} />
+                      <CategoryIcon 
+                        category={job.categoryLabel || job.category || job.profession} 
+                        profession={job.profession || job.title} 
+                        color={jobDetails.color} 
+                        size={24} 
+                        strokeWidth={2.4} 
+                      />
                     </View>
 
-                    {/* Título e Data Postado */}
                     <View className="flex-1">
-                      <Text className="text-[17px] font-extrabold text-[#1E293B] mb-0.5 leading-snug" numberOfLines={1}>
+                      <Text className="text-[#1E293B] font-extrabold text-[16px] leading-snug" numberOfLines={1}>
                         {job.title}
                       </Text>
-                      <Text className="text-[13px] text-[#8C7A6B] font-medium">
-                        {formatPostedDate(job.createdAt || job.date)}
-                      </Text>
+                      <View className="flex-row items-center mt-0.5">
+                        <Text className="text-[#64748B] text-xs font-semibold">
+                          {job.profession && job.profession !== job.title 
+                            ? job.profession 
+                            : (job.categoryLabel || jobDetails.label || 'Serviço')}
+                        </Text>
+                        <Text className="text-[#CBD5E1] text-xs mx-1.5">•</Text>
+                        <Text className="text-[#94A3B8] text-[11px] font-medium">
+                          {formatPostedDate(job.createdAt || job.date)}
+                        </Text>
+                      </View>
                     </View>
                   </View>
 
-                  {/* Badge de Status */}
+                  {/* Valor da vaga */}
+                  <Text className="text-[#F97316] font-extrabold text-base">
+                    R$ {job.paymentValue || '0,00'}
+                  </Text>
+                </View>
+
+                {/* Linha Inferior: Badge de Status + Propostas Recebidas Reais */}
+                <View className="flex-row items-center pt-2.5 border-t border-slate-100 justify-between">
                   <View 
-                    className="px-3.5 py-1 rounded-full"
+                    className="px-2.5 py-0.5 rounded-full"
                     style={{ backgroundColor: badgeBg }}
                   >
-                    <Text className="text-[12px] font-bold" style={{ color: badgeColor }}>
+                    <Text className="text-[11px] font-bold uppercase tracking-wider" style={{ color: badgeColor }}>
                       {badgeText}
                     </Text>
                   </View>
-                </View>
 
-                {/* Bottom Section — Propostas e Seta */}
-                <View className="flex-row items-center justify-between pt-4 border-t border-slate-100/70">
                   <View className="flex-row items-center">
-                    {job.status === 'Em análise' ? (
-                      <Mail color="#8C7A6B" size={17} strokeWidth={2.2} className="mr-2" />
+                    {count > 0 ? (
+                      <View className="flex-row items-center">
+                        <Users color="#FF7A2F" size={14} strokeWidth={2.4} style={{ marginRight: 5 }} />
+                        <Text className="text-[#FF7A2F] font-bold text-xs">
+                          {count === 1 ? '1 proposta recebida' : `${count} propostas recebidas`}
+                        </Text>
+                        <ChevronRight color="#FF7A2F" size={13} strokeWidth={2.8} style={{ marginLeft: 3 }} />
+                      </View>
                     ) : (
-                      <Users color="#FF7A2F" size={18} strokeWidth={2.4} className="mr-2" />
+                      <View className="flex-row items-center">
+                        <Text className="text-[#FF7A2F] font-bold text-xs">
+                          Aguardando propostas
+                        </Text>
+                        <ChevronRight color="#CBD5E1" size={13} strokeWidth={2.4} style={{ marginLeft: 3 }} />
+                      </View>
                     )}
-                    <Text 
-                      className={`text-[14px] font-bold ${
-                        job.status === 'Em análise' ? 'text-[#8C7A6B] font-semibold' : 'text-[#FF7A2F]'
-                      }`}
-                    >
-                      {job.status === 'Em análise'
-                        ? 'Você está analisando propostas'
-                        : `${job.proposalsCount || 1} propostas recebidas`}
-                    </Text>
                   </View>
-
-                  <ChevronRight color="#CBD5E1" size={18} strokeWidth={2.5} />
                 </View>
               </TouchableOpacity>
             );

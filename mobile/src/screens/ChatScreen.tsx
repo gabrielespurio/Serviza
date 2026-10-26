@@ -13,10 +13,11 @@ import {
   StyleSheet
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, Send, CheckCircle2, Briefcase, MoreVertical } from '../components/icons';
+import { ArrowLeft, Send, CheckCircle2, Briefcase, MoreVertical, MessageSquare } from '../components/icons';
 import { Paperclip, Mic } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LinearGradient } from 'expo-linear-gradient';
+import { updateChatIndex, markChatAsRead } from '../services/chatService';
 
 export interface ChatMessage {
   id: string;
@@ -71,25 +72,22 @@ export default function ChatScreen({ route, navigation }: any) {
 
         const rawHistory = await AsyncStorage.getItem(storageKey);
         if (rawHistory) {
-          const loaded: ChatMessage[] = JSON.parse(rawHistory);
-          setMessages(loaded);
-        } else {
-          // Inicializar como Prestador na V2, com uma mensagem quente
-          const initialMsgText = status === 'ACCEPTED'
-            ? `Olá! Tudo bem? Vi que você aceitou o serviço para "${jobTitle}". Você consegue trazer a escada? O teto é um pouco alto.`
-            : `Olá! Tudo bem? Vi que você tem interesse na minha proposta de R$ ${proposalPrice} para "${jobTitle}". Estou à disposição para negociarmos detalhes!`;
-
-          const initialMessages: ChatMessage[] = [
-            {
-              id: 'msg_init_' + Date.now(),
-              senderRole: 'contratante',
-              senderName: currentRole === 'contratante' ? 'Você' : recipientName,
-              text: initialMsgText,
-              timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          try {
+            const loaded: ChatMessage[] = JSON.parse(rawHistory);
+            const valid = Array.isArray(loaded) ? loaded.filter(m => 
+              !m.id?.startsWith('msg_init_') &&
+              !m.text?.toLowerCase().includes('vi que você tem interesse na minha proposta') &&
+              !m.text?.toLowerCase().includes('você consegue trazer a escada')
+            ) : [];
+            setMessages(valid);
+            if (valid.length > 0) {
+              await markChatAsRead(storageKey);
             }
-          ];
-          setMessages(initialMessages);
-          await AsyncStorage.setItem(storageKey, JSON.stringify(initialMessages));
+          } catch {
+            setMessages([]);
+          }
+        } else {
+          setMessages([]);
         }
       } catch (error) {
         console.log('Erro ao carregar mensagens do chat', error);
@@ -119,6 +117,20 @@ export default function ChatScreen({ route, navigation }: any) {
 
     try {
       await AsyncStorage.setItem(storageKey, JSON.stringify(updated));
+      await updateChatIndex({
+        storageKey,
+        recipientId,
+        recipientName,
+        recipientAvatar,
+        jobId,
+        jobTitle,
+        proposalId,
+        status,
+        lastMessage: newMsg.text,
+        lastMessageTimestamp: newMsg.timestamp,
+        senderRole: myRole,
+        myRole
+      });
     } catch (error) {
       console.log('Erro ao salvar mensagem', error);
     }
@@ -255,9 +267,22 @@ export default function ChatScreen({ route, navigation }: any) {
             data={messages}
             keyExtractor={item => item.id}
             renderItem={renderMessage}
-            contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 24 }}
+            contentContainerStyle={{ paddingHorizontal: 16, paddingTop: 10, paddingBottom: 24, flexGrow: 1 }}
             showsVerticalScrollIndicator={false}
             onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
+            ListEmptyComponent={
+              <View className="flex-1 items-center justify-center py-20 px-8">
+                <View className="w-16 h-16 bg-[#FFF4ED] rounded-full items-center justify-center mb-3">
+                  <MessageSquare color="#FF7A2F" size={28} strokeWidth={2} />
+                </View>
+                <Text className="text-[#1E293B] font-extrabold text-[15px] mb-1.5 text-center">
+                  Inicie a conversa
+                </Text>
+                <Text className="text-[#64748B] text-center text-xs leading-relaxed max-w-[240px]">
+                  Envie uma mensagem abaixo para alinhar os detalhes e fechar o serviço.
+                </Text>
+              </View>
+            }
           />
         )}
 

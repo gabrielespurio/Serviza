@@ -261,6 +261,77 @@ export default function StepLocation({ data, onUpdate }: StepProps) {
 
   // ========== LOCATION HANDLERS ==========
 
+  // Normaliza nomes de rua para comparação (remove acentos, prefixos e pontuação)
+  const normalizeStreet = (s: string = '') =>
+    s
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase()
+      .replace(/^(rua|r\.|avenida|av\.?|alameda|al\.|travessa|tv\.|estrada|rodovia|praca|pca\.)\s+/i, '')
+      .replace(/[^a-z0-9 ]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+
+  const streetsMatch = (a?: string, b?: string) => {
+    const na = normalizeStreet(a);
+    const nb = normalizeStreet(b);
+    return !!na && !!nb && (na === nb || na.includes(nb) || nb.includes(na));
+  };
+
+  // Converte coordenadas em endereço. O geocoder nativo (Apple/Google) costuma acertar
+  // a rua, mas no Brasil frequentemente retorna um bairro desatualizado/genérico.
+  // Por isso o resultado é validado com o ViaCEP (base oficial dos Correios).
+  const resolveAddressFromCoords = async (latitude: number, longitude: number) => {
+    const [geo] = await Location.reverseGeocodeAsync({ latitude, longitude });
+
+    const address = {
+      cep: geo?.postalCode || '',
+      estado: geo?.region || '',
+      cidade: geo?.city || geo?.subregion || '',
+      bairro: geo?.district || '',
+      rua: geo?.street || '',
+      numero: geo?.streetNumber || '',
+      complemento: '',
+    };
+
+    const applyViaCep = (v: any) => {
+      address.bairro = v.bairro || address.bairro;
+      address.cidade = v.localidade || address.cidade;
+      address.estado = v.uf || address.estado;
+      address.rua = v.logradouro || address.rua;
+      address.cep = v.cep || address.cep;
+    };
+
+    try {
+      // 1) Consulta pelo CEP retornado pelo GPS — só aceita se a rua bater
+      const cleanCep = address.cep.replace(/\D/g, '');
+      if (cleanCep.length === 8) {
+        const res = await axios.get(`https://viacep.com.br/ws/${cleanCep}/json/`, { timeout: 5000 });
+        if (!res.data?.erro && streetsMatch(res.data.logradouro, address.rua)) {
+          applyViaCep(res.data);
+          return address;
+        }
+      }
+
+      // 2) Fallback: busca por UF/Cidade/Rua no ViaCEP
+      const uf = address.estado.length === 2 ? address.estado : '';
+      if (uf && address.cidade && normalizeStreet(address.rua).length >= 3) {
+        const url = `https://viacep.com.br/ws/${encodeURIComponent(uf)}/${encodeURIComponent(address.cidade)}/${encodeURIComponent(address.rua)}/json/`;
+        const res = await axios.get(url, { timeout: 5000 });
+        const list: any[] = Array.isArray(res.data) ? res.data.filter((r) => streetsMatch(r.logradouro, address.rua)) : [];
+        const bairros = Array.from(new Set(list.map((r) => r.bairro)));
+        // Só aplica se não houver ambiguidade (mesma rua em bairros diferentes)
+        if (list.length > 0 && bairros.length === 1) {
+          applyViaCep(list[0]);
+        }
+      }
+    } catch (e) {
+      // ViaCEP indisponível: mantém o resultado do geocoder nativo
+    }
+
+    return address;
+  };
+
   const handleGPS = async () => {
     setLoadingGPS(true);
     onUpdate({ locationType: 'gps' });
@@ -275,19 +346,11 @@ export default function StepLocation({ data, onUpdate }: StepProps) {
       const location = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       const { latitude, longitude } = location.coords;
 
-      const [geo] = await Location.reverseGeocodeAsync({ latitude, longitude });
+      const address = await resolveAddressFromCoords(latitude, longitude);
 
       onUpdate({
         coordinates: { latitude, longitude },
-        address: {
-          cep: geo?.postalCode || '',
-          estado: geo?.region || '',
-          cidade: geo?.city || geo?.subregion || '',
-          bairro: geo?.district || '',
-          rua: geo?.street || '',
-          numero: geo?.streetNumber || '',
-          complemento: '',
-        },
+        address,
       });
     } catch (e) {
       Alert.alert('Erro', 'Não foi possível obter sua localização. Tente novamente.');
@@ -341,9 +404,22 @@ export default function StepLocation({ data, onUpdate }: StepProps) {
     }
   };
 
-  const handleMapDrag = (e: any) => {
+  const handleMapDrag = async (e: any) => {
     const { latitude, longitude } = e.nativeEvent.coordinate;
     onUpdate({ coordinates: { latitude, longitude } });
+
+    // No modo GPS o endereço exibido vem das coordenadas: recalcular ao mover o marcador
+    if (data.locationType === 'gps') {
+      try {
+        const address = await resolveAddressFromCoords(latitude, longitude);
+        // Mantém o número digitado pelo usuário se continuar na mesma rua
+        const keepNumero = streetsMatch(address.rua, data.address?.rua) && data.address?.numero;
+        onUpdate({
+          coordinates: { latitude, longitude },
+          address: { ...address, numero: keepNumero ? data.address.numero : address.numero },
+        });
+      } catch (err) {}
+    }
   };
 
   const hasAddress = data.address?.rua || data.address?.cidade;

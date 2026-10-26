@@ -8,8 +8,10 @@ const config = getDefaultConfig(__dirname);
 // 1. Usar múltiplos workers paralelos
 config.maxWorkers = 4;
 
-// 2. Reduzir extensões escaneadas — menos I/O no disco  
-config.resolver.sourceExts = ['tsx', 'ts', 'jsx', 'js', 'json', 'mjs'];
+// 2. Garantir suporte a mjs sem perder as extensões padrão do Expo
+if (!config.resolver.sourceExts.includes('mjs')) {
+  config.resolver.sourceExts.push('mjs');
+}
 
 // 3. Habilitar exports map do package.json para pacotes modernos como axios e nativewind
 config.resolver.unstable_enablePackageExports = true;

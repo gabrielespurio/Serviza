@@ -1,10 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert, KeyboardAvoidingView, Platform, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ArrowLeft, User, Mail, Smartphone as Phone, MapPin, Search, CheckCircle2 } from '../components/icons';
+import { ArrowLeft, User, Mail, Smartphone as Phone, MapPin, Search, CheckCircle2, Lock } from '../components/icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
-import api from '../services/api';
+import { api } from '../services/api';
 
 export default function EditProfileScreen() {
   const navigation = useNavigation<any>();
@@ -32,27 +32,56 @@ export default function EditProfileScreen() {
 
   const loadData = async () => {
     try {
+      let parsed: any = null;
       const rawUser = await AsyncStorage.getItem('@ContrataAI:userData');
       if (rawUser) {
-        const parsed = JSON.parse(rawUser);
-        
-        // Load data from old format if new fields aren't present yet
+        parsed = JSON.parse(rawUser);
+      }
+
+      // Se tiver email, tentar buscar perfil permanente vinculado ao email para mesclar
+      if (parsed?.email) {
+        const emailKey = parsed.email.toLowerCase().trim();
+        const rawPermanent = await AsyncStorage.getItem(`@ContrataAI:profile:${emailKey}`);
+        if (rawPermanent) {
+          const perm = JSON.parse(rawPermanent);
+          parsed = { ...perm, ...parsed };
+        }
+      }
+
+      // Tentar sincronizar do backend se estiver logado
+      try {
+        const res = await api.get('/users/profile');
+        if (res.data) {
+          const be = res.data;
+          const beDoc = be.contratante?.document;
+          parsed = {
+            ...parsed,
+            nomeCompleto: be.name || parsed?.nomeCompleto,
+            email: be.email || parsed?.email,
+            cpfCnpj: beDoc || parsed?.cpfCnpj,
+          };
+        }
+      } catch (e) {}
+
+      if (parsed) {
         setForm(prev => ({
           ...prev,
           nomeCompleto: parsed.nomeCompleto || parsed.name || '',
           email: parsed.email || '',
           telefone: parsed.telefone || parsed.phone || '',
           cidadeUf: parsed.cidadeUf || parsed.city || '',
-          cpfCnpj: parsed.cpfCnpj || '',
-          cep: parsed.cep || '',
-          logradouro: parsed.logradouro || '',
-          numero: parsed.numero || '',
-          complemento: parsed.complemento || '',
-          bairro: parsed.bairro || '',
+          cpfCnpj: parsed.cpfCnpj || (parsed.document || ''),
+          cep: parsed.cep || (parsed.address?.cep || ''),
+          logradouro: parsed.logradouro || (parsed.address?.logradouro || parsed.address?.rua || ''),
+          numero: parsed.numero || (parsed.address?.numero || ''),
+          complemento: parsed.complemento || (parsed.address?.complemento || ''),
+          bairro: parsed.bairro || (parsed.address?.bairro || ''),
         }));
 
         if (parsed.tipoPessoa) {
-          setTipoPessoa(parsed.tipoPessoa);
+          setTipoPessoa(parsed.tipoPessoa === 'juridica' ? 'juridica' : 'fisica');
+        } else if (parsed.cpfCnpj && parsed.cpfCnpj.replace(/\D/g, '').length > 11) {
+          setTipoPessoa('juridica');
         }
       }
     } catch (e) {
@@ -94,6 +123,33 @@ export default function EditProfileScreen() {
     setForm({ ...form, [field]: formatted });
   };
 
+  const handleToggleTipoPessoa = (target: 'fisica' | 'juridica') => {
+    if (target === tipoPessoa) return;
+
+    const currentLabel = tipoPessoa === 'fisica' ? 'Pessoa Física' : 'Pessoa Jurídica';
+    const targetLabel = target === 'fisica' ? 'Pessoa Física' : 'Pessoa Jurídica';
+
+    Alert.alert(
+      'Alteração de Tipo de Conta',
+      `Sua conta está configurada como ${currentLabel}. Para alterar seu cadastro para ${targetLabel}, é necessário solicitar ao suporte para validação de documentos fiscais.`,
+      [
+        { text: 'Entendido', style: 'cancel' },
+        {
+          text: 'Falar com Suporte',
+          onPress: () => {
+            const subject = encodeURIComponent(`Solicitação de alteração para ${targetLabel} - Serviza`);
+            const body = encodeURIComponent(
+              `Olá equipe de suporte da Serviza,\n\nSolicito a alteração do meu tipo de conta de ${currentLabel} para ${targetLabel}.\n\nNome: ${form.nomeCompleto}\nE-mail: ${form.email}\nDocumento atual: ${form.cpfCnpj}\n\nObrigado(a)!`
+            );
+            Linking.openURL(`mailto:suporte@serviza.com.br?subject=${subject}&body=${body}`).catch(() => {
+              Alert.alert('Suporte Serviza', 'Envie um e-mail para suporte@serviza.com.br com seus dados solicitando a alteração.');
+            });
+          }
+        }
+      ]
+    );
+  };
+
   const handleSearchCEP = async () => {
     const rawCep = form.cep.replace(/\D/g, '');
     if (rawCep.length !== 8) {
@@ -131,11 +187,14 @@ export default function EditProfileScreen() {
 
     setLoading(true);
     try {
-      // 1. Atualizar no Backend (com os campos que a API suporta atualmente)
+      const rawDoc = form.cpfCnpj.replace(/\D/g, '');
+      const rawPhone = form.telefone.replace(/\D/g, '');
+
+      // 1. Atualizar no Backend
       await api.put('/users/profile', {
         name: form.nomeCompleto.trim(),
-        email: form.email.trim(),
-        phone: form.telefone.trim(),
+        document: rawDoc,
+        phone: rawPhone,
         city: form.cidadeUf.trim(),
       }).catch(() => null); // Ignora erro caso a API falhe no ambiente local
 
@@ -159,9 +218,24 @@ export default function EditProfileScreen() {
         bairro: form.bairro.trim(),
         cidadeUf: form.cidadeUf.trim(),
         city: form.cidadeUf.trim(),
+        address: {
+          cep: form.cep.trim(),
+          logradouro: form.logradouro.trim(),
+          numero: form.numero.trim(),
+          complemento: form.complemento.trim(),
+          bairro: form.bairro.trim(),
+          cidadeUf: form.cidadeUf.trim(),
+        }
       };
 
       await AsyncStorage.setItem('@ContrataAI:userData', JSON.stringify(updatedUser));
+
+      // Salvar também no perfil permanente vinculado ao email
+      const emailToUse = (form.email.trim() || currentUser.email || '').toLowerCase().trim();
+      if (emailToUse) {
+        await AsyncStorage.setItem(`@ContrataAI:profile:${emailToUse}`, JSON.stringify(updatedUser));
+      }
+
       Alert.alert('Sucesso', 'Seus dados foram salvos com sucesso!');
       navigation.goBack();
     } catch (e) {
@@ -186,22 +260,37 @@ export default function EditProfileScreen() {
           
           <Text className="text-[17px] font-extrabold text-[#1E293B]">Meus Dados</Text>
           <View className="w-10 h-10" /> 
-        </View><ScrollView className="flex-1 px-5 pt-5 pb-10" showsVerticalScrollIndicator={false}><View className="flex-row bg-white rounded-full p-1 border border-slate-100 shadow-sm mb-6">
-            <TouchableOpacity 
-              activeOpacity={0.8}
-              onPress={() => { setTipoPessoa('fisica'); handleMask('cpfCnpj', form.cpfCnpj); }}
-              className={`flex-1 py-2.5 rounded-full items-center ${tipoPessoa === 'fisica' ? 'bg-[#FFF4ED]' : ''}`}
-            >
-              <Text className={`text-sm font-extrabold ${tipoPessoa === 'fisica' ? 'text-[#FF7A2F]' : 'text-[#64748B]'}`}>Pessoa Física</Text>
-            </TouchableOpacity>
-            
-            <TouchableOpacity 
-              activeOpacity={0.8}
-              onPress={() => { setTipoPessoa('juridica'); handleMask('cpfCnpj', form.cpfCnpj); }}
-              className={`flex-1 py-2.5 rounded-full items-center ${tipoPessoa === 'juridica' ? 'bg-[#FFF4ED]' : ''}`}
-            >
-              <Text className={`text-sm font-extrabold ${tipoPessoa === 'juridica' ? 'text-[#FF7A2F]' : 'text-[#64748B]'}`}>Pessoa Jurídica</Text>
-            </TouchableOpacity>
+        </View><ScrollView className="flex-1 px-5 pt-5 pb-10" showsVerticalScrollIndicator={false}>
+          <View className="mb-6">
+            <View className="flex-row bg-white rounded-full p-1 border border-slate-100 shadow-sm">
+              <TouchableOpacity 
+                activeOpacity={tipoPessoa === 'fisica' ? 1 : 0.7}
+                onPress={() => handleToggleTipoPessoa('fisica')}
+                className={`flex-1 py-2.5 rounded-full items-center flex-row justify-center ${tipoPessoa === 'fisica' ? 'bg-[#FFF4ED]' : ''}`}
+              >
+                {tipoPessoa !== 'fisica' && (
+                  <Lock color="#94A3B8" size={13} strokeWidth={2.4} style={{ marginRight: 6 }} />
+                )}
+                <Text className={`text-sm font-extrabold ${tipoPessoa === 'fisica' ? 'text-[#FF7A2F]' : 'text-[#94A3B8]'}`}>Pessoa Física</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                activeOpacity={tipoPessoa === 'juridica' ? 1 : 0.7}
+                onPress={() => handleToggleTipoPessoa('juridica')}
+                className={`flex-1 py-2.5 rounded-full items-center flex-row justify-center ${tipoPessoa === 'juridica' ? 'bg-[#FFF4ED]' : ''}`}
+              >
+                {tipoPessoa !== 'juridica' && (
+                  <Lock color="#94A3B8" size={13} strokeWidth={2.4} style={{ marginRight: 6 }} />
+                )}
+                <Text className={`text-sm font-extrabold ${tipoPessoa === 'juridica' ? 'text-[#FF7A2F]' : 'text-[#94A3B8]'}`}>Pessoa Jurídica</Text>
+              </TouchableOpacity>
+            </View>
+            <View className="flex-row items-center justify-center mt-2 px-2">
+              <Lock color="#94A3B8" size={12} strokeWidth={2.2} style={{ marginRight: 4 }} />
+              <Text className="text-[11px] font-semibold text-[#94A3B8] text-center">
+                Definido no cadastro. Para alterar, solicite ao suporte.
+              </Text>
+            </View>
           </View>
 
           

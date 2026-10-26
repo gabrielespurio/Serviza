@@ -4,22 +4,9 @@ import { Home, Search, MessageSquare, User } from '../components/icons';
 import HomePrestador from '../screens/prestador/HomePrestador';
 import SearchJobsScreen from '../screens/prestador/SearchJobsScreen';
 import ProfileScreen from '../screens/ProfileScreen';
-import { View, Text } from 'react-native';
+import ChatListScreen from '../screens/ChatListScreen';
 
 const Tab = createBottomTabNavigator();
-
-// Placeholder para tela de chat se não estiver aberta
-const ChatPlaceholderScreen = () => (
-  <View className="flex-1 items-center justify-center bg-[#FAFAFA] p-8">
-    <View className="w-16 h-16 rounded-full bg-[#FFF4ED] items-center justify-center mb-4">
-      <MessageSquare color="#FF7A2F" size={32} />
-    </View>
-    <Text className="text-xl font-extrabold text-[#1E293B] mb-2">Mensagens</Text>
-    <Text className="text-center text-sm text-[#64748B] leading-relaxed">
-      Suas conversas e negociações com os contratantes aparecerão aqui assim que você enviar uma proposta.
-    </Text>
-  </View>
-);
 
 export default function PrestadorNavigator() {
   return (
@@ -65,7 +52,7 @@ export default function PrestadorNavigator() {
       />
       <Tab.Screen 
         name="Chat" 
-        component={ChatPlaceholderScreen} 
+        component={ChatListScreen} 
         options={{
           tabBarIcon: ({ color, size }) => <MessageSquare color={color} size={22} strokeWidth={2.4} />
         }}

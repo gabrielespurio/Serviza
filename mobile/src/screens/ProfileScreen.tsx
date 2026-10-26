@@ -68,7 +68,7 @@ export default function ProfileScreen({ navigation }: any) {
   const [completedServices, setCompletedServices] = useState<number>(0);
   const [providerProfile, setProviderProfile] = useState<ProviderProfile>({
     completedServices: 0,
-    level: ProviderLevel.INICIANTE
+    level: ProviderLevel.NEW
   });
   const [levelUpConfig, setLevelUpConfig] = useState<ProviderLevelConfig | null>(null);
   const [showCelebrationModal, setShowCelebrationModal] = useState(false);

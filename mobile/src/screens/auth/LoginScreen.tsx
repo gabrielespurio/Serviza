@@ -45,37 +45,33 @@ export default function LoginScreen({ navigation }: any) {
         await AsyncStorage.setItem('@ContrataAI:token', res.data.token);
       }
       
-      let userRole = res.data?.user?.role;
+      // Buscar perfil local permanente vinculado ao email para preservar dados locais (endereço, CPF, etc.)
+      const localProfile = await getLocalProfile(email);
+
+      let userRole = res.data?.user?.role || localProfile?.role;
       let userDataToSave: any = {
-        name: res.data?.user?.name || email.split('@')[0],
-        email: res.data?.user?.email || email,
+        ...(localProfile || {}),
+        name: res.data?.user?.name || localProfile?.name || email.split('@')[0],
+        email: res.data?.user?.email || localProfile?.email || email,
         role: userRole || 'CONTRATANTE',
-        skills: res.data?.user?.prestador?.skills || []
+        skills: res.data?.user?.prestador?.skills || localProfile?.skills || []
       };
 
       try {
         const profileRes = await api.get('/users/profile');
         if (profileRes.data) {
-          userRole = profileRes.data.role || userRole;
+          const be = profileRes.data;
+          userRole = be.role || userRole;
           userDataToSave = {
             ...userDataToSave,
-            name: profileRes.data.name || userDataToSave.name,
-            email: profileRes.data.email || userDataToSave.email,
+            name: be.name || userDataToSave.name,
+            email: be.email || userDataToSave.email,
             role: userRole || userDataToSave.role,
-            skills: profileRes.data.prestador?.skills || userDataToSave.skills
+            skills: be.prestador?.skills || userDataToSave.skills,
+            ...(be.contratante?.document ? { cpfCnpj: be.contratante.document } : {})
           };
         }
       } catch (e) {}
-
-      // Se o backend não retornou role, buscar perfil local permanente
-      if (!userRole) {
-        const localProfile = await getLocalProfile(email);
-        if (localProfile) {
-          userRole = localProfile.role;
-          // Mesclar dados locais completos com os do backend
-          userDataToSave = { ...localProfile, ...userDataToSave, role: userRole, skills: localProfile.skills || userDataToSave.skills, name: localProfile.name || userDataToSave.name };
-        }
-      }
 
       userDataToSave.role = userRole || 'CONTRATANTE';
       await AsyncStorage.setItem('@ContrataAI:userData', JSON.stringify(userDataToSave));

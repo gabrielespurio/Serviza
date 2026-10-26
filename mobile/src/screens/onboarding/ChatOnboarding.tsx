@@ -238,17 +238,18 @@ export default function ChatOnboarding({ route, navigation }: any) {
       setStep(3.5);
       addBotMessage(`Ótimo, ${firstName}! 📸 Agora, que tal adicionar uma foto de perfil? Usuários com foto têm até 3x mais chances de serem contratados na plataforma!`);
     } else if (step === 4) {
-      setCep(val);
+      const cleanCep = val.replace(/[^0-9]/g, '');
+      setCep(cleanCep);
       setIsTyping(true);
       try {
-        const cleanCep = val.replace(/[^0-9]/g, '');
         const res = await axios.get(`https://viacep.com.br/ws/${cleanCep}/json/`);
         if (res.data.erro) throw new Error();
         setAddress({
-          rua: res.data.logradouro,
-          bairro: res.data.bairro,
-          estado: res.data.uf,
-          cidade: res.data.localidade
+          cep: cleanCep,
+          rua: res.data.logradouro || '',
+          bairro: res.data.bairro || '',
+          estado: res.data.uf || '',
+          cidade: res.data.localidade || ''
         });
         setIsTyping(false);
         setStep(5);
@@ -259,19 +260,19 @@ export default function ChatOnboarding({ route, navigation }: any) {
         addBotMessage('Não consegui localizar este CEP. Sem problemas! Qual o nome da sua rua?');
       }
     } else if (step === 5.1) {
-      setAddress({...address, rua: val});
+      setAddress((prev: any) => ({ ...prev, rua: val }));
       setStep(5.2);
       addBotMessage('Qual o nome do seu bairro?');
     } else if (step === 5.2) {
-      setAddress({...address, bairro: val});
+      setAddress((prev: any) => ({ ...prev, bairro: val }));
       setStep(5.3);
       addBotMessage('Qual a sigla do seu Estado? (ex: SP)');
     } else if (step === 5.3) {
-      setAddress({...address, estado: val});
+      setAddress((prev: any) => ({ ...prev, estado: val }));
       setStep(5.4);
       addBotMessage('E por fim, qual o número da residência?');
     } else if (step === 5.4) {
-      setAddress({...address, numero: val});
+      setAddress((prev: any) => ({ ...prev, numero: val }));
       setStep(5.5);
       addBotMessage('Endereço salvo com sucesso! 🏠 Agora me conta, qual é o seu objetivo principal na plataforma? Você quer contratar serviços ou deseja trabalhar oferecendo seus serviços?');
     } else if (step === 7) {
@@ -415,11 +416,28 @@ export default function ChatOnboarding({ route, navigation }: any) {
 
     try {
       setLoading(true);
+      const fullName = `${firstName} ${lastName}`.trim();
+      const rawCpfCnpj = (cpf || '').replace(/\D/g, '');
+      const formattedCpfCnpj = personType === 'PJ' 
+        ? maskCNPJ(rawCpfCnpj) 
+        : maskCPF(rawCpfCnpj);
+      const cleanPhone = (baseData?.phone || '').replace(/\D/g, '');
+      const rawCep = (cep || address.cep || '').replace(/\D/g, '');
+      const formattedCep = rawCep.length === 8 ? `${rawCep.slice(0, 5)}-${rawCep.slice(5)}` : rawCep;
+      const logradouro = address.rua || address.logradouro || '';
+      const bairro = address.bairro || '';
+      const numero = address.numero || '';
+      const cidade = address.cidade || address.localidade || '';
+      const estado = address.estado || address.uf || '';
+      const cidadeUf = cidade && estado ? `${cidade}/${estado}` : (cidade || '');
+
       const payload = {
         email: baseData?.email || 'user@email.com',
         password: baseData?.password || '123456',
-        name: `${firstName} ${lastName}`,
+        name: fullName,
         role: finalRole,
+        document: rawCpfCnpj || undefined,
+        companyName: personType === 'PJ' ? fullName : undefined,
         skills: finalRole === 'CONTRATANTE' ? selectedCategories : (skillsOverride || selectedProfessions),
         description: bioOverride || bio || '',
       };
@@ -429,13 +447,32 @@ export default function ChatOnboarding({ route, navigation }: any) {
       } catch (err: any) {}
 
       const profileData = {
-        name: payload.name,
+        name: fullName,
+        nomeCompleto: fullName,
         email: payload.email,
-        phone: baseData?.phone || '',
+        phone: cleanPhone,
+        telefone: cleanPhone,
         role: finalRole,
+        tipoPessoa: personType === 'PJ' ? 'juridica' : 'fisica',
+        cpfCnpj: formattedCpfCnpj || rawCpfCnpj,
+        cep: formattedCep,
+        logradouro: logradouro,
+        numero: numero,
+        complemento: address.complemento || '',
+        bairro: bairro,
+        cidadeUf: cidadeUf,
+        city: cidadeUf || (cidade ? `${cidade}, ${estado}` : 'São Paulo, SP'),
         skills: payload.skills,
         description: payload.description,
-        city: address.cidade ? `${address.cidade}, ${address.estado}` : 'São Paulo, SP'
+        address: {
+          cep: formattedCep,
+          logradouro,
+          numero,
+          complemento: address.complemento || '',
+          bairro,
+          cidade,
+          estado,
+        }
       };
 
       // Salvar dados do perfil atual
@@ -449,6 +486,7 @@ export default function ChatOnboarding({ route, navigation }: any) {
       // Salvar avatar vinculado ao email para restauração futura após logout
       if (avatarUri) {
         await AsyncStorage.setItem(`@ContrataAI:avatar:${emailKey}`, avatarUri);
+        await AsyncStorage.setItem('@ContrataAI:avatarUrl', avatarUri);
       }
 
       if (finalRole === 'PRESTADOR') {
@@ -687,6 +725,7 @@ export default function ChatOnboarding({ route, navigation }: any) {
               <TouchableOpacity 
                 style={{ width: '100%', backgroundColor: '#FF7A2F', height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center' }}
                 onPress={() => {
+                  setPersonType('PF');
                   addUserMessage('Pessoa Física');
                   setStep(3);
                   addBotMessage('Certo! Qual o seu CPF? (apenas números)');
@@ -697,6 +736,7 @@ export default function ChatOnboarding({ route, navigation }: any) {
               <TouchableOpacity 
                 style={{ width: '100%', backgroundColor: '#F1F5F9', height: 52, borderRadius: 16, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: '#E2E8F0' }}
                 onPress={() => {
+                  setPersonType('PJ');
                   addUserMessage('Pessoa Jurídica');
                   setStep(3.1);
                   addBotMessage('Certo! Qual o seu CNPJ? (apenas números)');

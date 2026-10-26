@@ -79,4 +79,80 @@ export class UserController {
       return res.status(500).json({ error: 'Erro ao buscar perfil.' });
     }
   }
+
+  async updateProfile(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ error: 'Não autorizado.' });
+      }
+
+      const { name, document, companyName, skills, description } = req.body;
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+          contratante: true,
+          prestador: true
+        }
+      });
+
+      if (!user) {
+        return res.status(404).json({ error: 'Usuário não encontrado.' });
+      }
+
+      if (name) {
+        await prisma.user.update({
+          where: { id: userId },
+          data: { name }
+        });
+      }
+
+      if (user.role === 'CONTRATANTE') {
+        await prisma.contratanteProfile.upsert({
+          where: { userId },
+          create: {
+            userId,
+            document: document || null,
+            companyName: companyName || null,
+          },
+          update: {
+            ...(document !== undefined ? { document } : {}),
+            ...(companyName !== undefined ? { companyName } : {}),
+          }
+        });
+      } else if (user.role === 'PRESTADOR') {
+        await prisma.prestadorProfile.upsert({
+          where: { userId },
+          create: {
+            userId,
+            skills: skills || [],
+            description: description || null,
+          },
+          update: {
+            ...(skills ? { skills } : {}),
+            ...(description !== undefined ? { description } : {}),
+          }
+        });
+      }
+
+      const updated = await prisma.user.findUnique({
+        where: { id: userId },
+        include: {
+          contratante: true,
+          prestador: true
+        }
+      });
+
+      if (!updated) {
+        return res.status(404).json({ error: 'Usuário não encontrado.' });
+      }
+
+      const { passwordHash, ...safeUser } = updated;
+      return res.status(200).json(safeUser);
+    } catch (error: any) {
+      console.error(error);
+      return res.status(500).json({ error: 'Erro ao atualizar perfil.' });
+    }
+  }
 }

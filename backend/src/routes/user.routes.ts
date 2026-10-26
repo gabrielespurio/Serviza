@@ -12,6 +12,7 @@ const upload = multer({ storage: multer.memoryStorage() });
 userRouter.use(authMiddleware);
 
 userRouter.get('/profile', userController.getProfile);
+userRouter.put('/profile', userController.updateProfile);
 userRouter.put('/avatar', upload.single('avatar'), userController.uploadAvatar);
 
 export { userRouter };
